@@ -17,7 +17,7 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Check if Docker Compose is available
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+if ! command -v docker compose &> /dev/null && ! docker compose version &> /dev/null; then
     echo "Error: Docker Compose is not installed. Please install Docker Compose first:"
     echo "https://docs.docker.com/compose/install/"
     exit 1
@@ -25,12 +25,12 @@ fi
 
 # Start PostgreSQL container
 echo "Starting PostgreSQL container..."
-docker-compose up -d
+docker compose up -d
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
 for i in {1..30}; do
-    if docker-compose exec -T postgres pg_isready -U ${DB_USER} -d ${DB_NAME} > /dev/null 2>&1; then
+    if docker compose exec -T postgres pg_isready -U ${DB_USER} -d ${DB_NAME} > /dev/null 2>&1; then
         echo "PostgreSQL is ready!"
         break
     fi

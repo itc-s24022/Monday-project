@@ -11,7 +11,7 @@ USE_POSTGRESQL = os.environ.get('USE_POSTGRESQL') == '1'
 if USE_POSTGRESQL:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://todo_user:todo_password@localhost/todo_db'
 else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://todo_user:todo_password@localhost/todo_db'
 
 db = SQLAlchemy(app)
 
