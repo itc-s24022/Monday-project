@@ -9,6 +9,8 @@ DB_USER="todo_user"
 DB_PASSWORD="todo_password"
 DB_NAME="todo_db"
 
+USE_POSTGRESQL = True  # PostgreSQL を使用するかどうか
+
 if USE_POSTGRESQL:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://todo_user:todo_password@localhost/todo_db'
 else:
