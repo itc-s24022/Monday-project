@@ -150,6 +150,24 @@ def add_task():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/tasks/today')
+def get_today_tasks():
+    """今日のタスク一覧を取得"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT * FROM tasks 
+            WHERE created_date = CURRENT_DATE 
+            ORDER BY created_at DESC
+        """)
+        tasks = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'tasks': [dict(t) for t in tasks]}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/task/start', methods=['POST'])
 def start_task():
     """タイマー開始
