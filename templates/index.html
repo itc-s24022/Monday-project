@@ -233,6 +233,16 @@
         box-shadow: 0 5px 15px rgba(238, 9, 121, 0.4);
       }
 
+      .btn-warning {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+      }
+
+      .btn-warning:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
+      }
+
       .btn:disabled {
         opacity: 0.5;
         cursor: not-allowed;
@@ -321,6 +331,90 @@
         padding: 8px 16px;
         font-size: 14px;
         border-radius: 6px;
+      }
+
+      /* モーダル */
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        animation: fadeIn 0.3s;
+      }
+
+      .modal.active {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 15px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        animation: slideIn 0.3s;
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateY(-50px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e0e0e0;
+      }
+
+      .modal-header h2 {
+        color: #333;
+        font-size: 24px;
+      }
+
+      .close-btn {
+        background: none;
+        border: none;
+        font-size: 28px;
+        color: #999;
+        cursor: pointer;
+        transition: color 0.3s;
+        padding: 0;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .close-btn:hover {
+        color: #333;
+      }
+
+      .modal-footer {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 20px;
+        padding-top: 15px;
+        border-top: 2px solid #e0e0e0;
       }
 
       /* レポート画面 */
@@ -687,30 +781,74 @@
       </div>
     </div>
 
+    <!-- 編集モーダル -->
+    <div id="edit-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>✏️ タスク編集</h2>
+          <button class="close-btn" onclick="closeEditModal()">&times;</button>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-task-name">タスク名（プロジェクト名） *</label>
+          <input
+            type="text"
+            id="edit-task-name"
+            placeholder="例: バックエンド開発"
+            maxlength="100"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="edit-category">カテゴリ *</label>
+          <select id="edit-category">
+            <option value="">選択してください</option>
+            <option value="開発">開発</option>
+            <option value="会議">会議</option>
+            <option value="メール">メール</option>
+            <option value="調査">調査</option>
+            <option value="その他">その他</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="edit-memo">メモ</label>
+          <textarea
+            id="edit-memo"
+            rows="3"
+            placeholder="作業内容の詳細など..."
+            maxlength="500"
+          ></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-primary btn-small" onclick="saveEditTask()">
+            💾 保存
+          </button>
+          <button class="btn btn-danger btn-small" onclick="closeEditModal()">
+            キャンセル
+          </button>
+        </div>
+      </div>
+    </div>
+
     <script>
       let timerInterval;
       let seconds = 0;
       let isRunning = false;
-      let isStopped = false; // 停止状態を追跡
+      let isStopped = false;
       let currentTaskId = null;
+      let editingTaskId = null;
 
       // ページ読み込み時の処理
       document.addEventListener("DOMContentLoaded", function () {
-        console.log("ページ読み込み完了");
-
-        // 現在の日付を表示
         updateCurrentDate();
-
-        // タスク一覧を読み込み
         loadTodayTasks();
-
-        // 現在の年月を設定
         const now = new Date();
         document.getElementById("report-year").value = now.getFullYear();
         document.getElementById("report-month").value = now.getMonth() + 1;
       });
 
-      // 現在の日付を表示
       function updateCurrentDate() {
         const now = new Date();
         const options = {
@@ -723,7 +861,6 @@
         document.getElementById("current-date").textContent = dateStr;
       }
 
-      // 今日の総作業時間を計算して表示
       function updateTodayTotalHours(tasks) {
         if (!tasks || tasks.length === 0) {
           document.getElementById("today-total-hours").textContent = "0.0h";
@@ -740,32 +877,23 @@
         ).textContent = `${totalHours}h`;
       }
 
-      // 今日のタスク一覧を読み込む
       async function loadTodayTasks() {
-        console.log("タスク一覧を読み込み開始...");
         const container = document.getElementById("tasks-container");
         container.innerHTML =
           '<p style="text-align: center; color: #666; padding: 20px;">読み込み中...</p>';
 
         try {
           const response = await fetch("/api/tasks/today");
-          console.log("APIレスポンス:", response);
 
           if (!response.ok) {
-            console.error("APIエラー:", response.status, response.statusText);
             container.innerHTML =
-              '<p style="text-align: center; color: #ff0000; padding: 20px;">エラー: APIが見つかりません。app.pyに /api/tasks/today エンドポイントを追加してください。</p>';
+              '<p style="text-align: center; color: #ff0000; padding: 20px;">エラー: タスクの読み込みに失敗しました</p>';
             return;
           }
 
           const data = await response.json();
-          console.log("取得データ:", data);
           const tasks = data.tasks || [];
-
-          // タスク一覧を表示
           displayTasks(tasks);
-
-          // 本日の総作業時間を更新
           updateTodayTotalHours(tasks);
         } catch (error) {
           console.error("タスク取得エラー:", error);
@@ -773,9 +901,7 @@
         }
       }
 
-      // タスク一覧を表示
       function displayTasks(tasks) {
-        console.log("タスク表示:", tasks.length, "件");
         const container = document.getElementById("tasks-container");
 
         if (!tasks || tasks.length === 0) {
@@ -786,7 +912,6 @@
 
         container.innerHTML = tasks
           .map((task) => {
-            // 作業時間の計算
             const totalSeconds = task.duration_seconds || 0;
             const hours = Math.floor(totalSeconds / 3600);
             const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -801,7 +926,6 @@
               timeText = `${secs}秒`;
             }
 
-            // 開始時刻・終了時刻のフォーマット
             const startTime = task.start_time
               ? new Date(task.start_time).toLocaleString("ja-JP", {
                   hour: "2-digit",
@@ -840,6 +964,9 @@
                             }
                         </div>
                         <div class="task-actions">
+                            <button class="btn btn-warning btn-small" onclick="openEditModal(${
+                              task.id
+                            })">✏️ 編集</button>
                             <button class="btn btn-danger btn-small" onclick="deleteTask(${
                               task.id
                             })">🗑 削除</button>
@@ -850,7 +977,6 @@
           .join("");
       }
 
-      // HTMLエスケープ関数
       function escapeHtml(text) {
         const div = document.createElement("div");
         div.textContent = text;
@@ -888,7 +1014,6 @@
           return;
         }
 
-        // タスクを登録
         try {
           const response = await fetch("/api/task/add", {
             method: "POST",
@@ -909,7 +1034,6 @@
           const data = await response.json();
           currentTaskId = data.task.id;
 
-          // タイマー開始APIを呼ぶ
           const startResponse = await fetch("/api/task/start", {
             method: "POST",
             headers: {
@@ -929,8 +1053,6 @@
           document.getElementById("start-btn").disabled = true;
           document.getElementById("stop-btn").disabled = false;
           document.getElementById("save-btn").disabled = true;
-
-          // タイマー表示を通常の色に戻す
           document.getElementById("timer").classList.remove("stopped");
 
           timerInterval = setInterval(() => {
@@ -946,15 +1068,11 @@
       async function stopTimer() {
         if (!isRunning || !currentTaskId) return;
 
-        // タイマーを一時停止（APIは呼ばない、ローカルで停止）
         isRunning = false;
         isStopped = true;
         clearInterval(timerInterval);
 
-        // タイマー表示をグレーアウト
         document.getElementById("timer").classList.add("stopped");
-
-        // ボタンの状態を更新
         document.getElementById("start-btn").disabled = true;
         document.getElementById("stop-btn").disabled = true;
         document.getElementById("stop-btn").style.display = "none";
@@ -966,14 +1084,10 @@
       function resumeTimer() {
         if (isRunning || !isStopped || !currentTaskId) return;
 
-        // タイマーを再開
         isRunning = true;
         isStopped = false;
 
-        // タイマー表示を通常の色に戻す
         document.getElementById("timer").classList.remove("stopped");
-
-        // ボタンの状態を更新
         document.getElementById("start-btn").disabled = true;
         document.getElementById("resume-btn").disabled = true;
         document.getElementById("resume-btn").style.display = "none";
@@ -1006,7 +1120,6 @@
         }
 
         try {
-          // タイマー停止APIを呼ぶ
           const response = await fetch("/api/task/stop", {
             method: "POST",
             headers: {
@@ -1021,10 +1134,8 @@
             throw new Error("タスクの保存に失敗しました");
           }
 
-          // タスク一覧を再読み込み
           await loadTodayTasks();
 
-          // フォームをリセット
           document.getElementById("task-name").value = "";
           document.getElementById("category").value = "";
           document.getElementById("memo").value = "";
@@ -1034,18 +1145,14 @@
           isStopped = false;
           isRunning = false;
 
-          // ボタンの状態をリセット
           document.getElementById("start-btn").disabled = false;
           document.getElementById("stop-btn").disabled = true;
           document.getElementById("stop-btn").style.display = "inline-block";
           document.getElementById("resume-btn").disabled = true;
           document.getElementById("resume-btn").style.display = "none";
           document.getElementById("save-btn").disabled = true;
-
-          // タイマー表示を通常の色に戻す
           document.getElementById("timer").classList.remove("stopped");
 
-          // タイマーが動いている場合は停止
           if (timerInterval) {
             clearInterval(timerInterval);
           }
@@ -1054,6 +1161,78 @@
         } catch (error) {
           console.error("エラー:", error);
           alert("タスクの保存に失敗しました: " + error.message);
+        }
+      }
+
+      async function openEditModal(taskId) {
+        editingTaskId = taskId;
+
+        // タスク情報を取得
+        try {
+          const response = await fetch("/api/tasks/today");
+          if (!response.ok) throw new Error("タスク情報の取得に失敗しました");
+
+          const data = await response.json();
+          const task = data.tasks.find((t) => t.id === taskId);
+
+          if (!task) {
+            alert("タスクが見つかりません");
+            return;
+          }
+
+          // モーダルにデータをセット
+          document.getElementById("edit-task-name").value = task.task_name;
+          document.getElementById("edit-category").value = task.category;
+          document.getElementById("edit-memo").value = task.memo || "";
+
+          // モーダルを表示
+          document.getElementById("edit-modal").classList.add("active");
+        } catch (error) {
+          console.error("エラー:", error);
+          alert("タスク情報の取得に失敗しました: " + error.message);
+        }
+      }
+
+      function closeEditModal() {
+        document.getElementById("edit-modal").classList.remove("active");
+        editingTaskId = null;
+      }
+
+      async function saveEditTask() {
+        if (!editingTaskId) return;
+
+        const taskName = document.getElementById("edit-task-name").value;
+        const category = document.getElementById("edit-category").value;
+        const memo = document.getElementById("edit-memo").value;
+
+        if (!taskName || !category) {
+          alert("タスク名とカテゴリは必須です");
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/task/update/${editingTaskId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              task_name: taskName,
+              category: category,
+              memo: memo,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("タスクの更新に失敗しました");
+          }
+
+          closeEditModal();
+          await loadTodayTasks();
+          alert("タスクを更新しました！");
+        } catch (error) {
+          console.error("エラー:", error);
+          alert("タスクの更新に失敗しました: " + error.message);
         }
       }
 
@@ -1074,7 +1253,6 @@
             throw new Error("タスクの削除に失敗しました");
           }
 
-          // タスク一覧を再読み込み
           loadTodayTasks();
           alert("タスクを削除しました");
         } catch (error) {
@@ -1088,8 +1266,6 @@
         const month = document.getElementById("report-month").value;
         const groupBy = document.getElementById("group-by").value;
 
-        console.log(`レポート生成: ${year}年${month}月 (${groupBy})`);
-
         try {
           const response = await fetch(
             `/api/report/monthly?year=${year}&month=${month}&group_by=${groupBy}`
@@ -1100,9 +1276,7 @@
           }
 
           const data = await response.json();
-          console.log("レポートデータ:", data);
 
-          // サマリーカードを更新
           const totalDays = data.totals?.total_days || 0;
           const totalHours = data.totals?.total_hours || 0;
           const totalTasks = data.totals?.total_tasks || 0;
@@ -1113,7 +1287,6 @@
             "total-tasks"
           ).textContent = `${totalTasks}件`;
 
-          // テーブルを更新
           displayReportTable(data.data || []);
         } catch (error) {
           console.error("レポート生成エラー:", error);
@@ -1189,6 +1362,14 @@
           alert("CSVエクスポートに失敗しました: " + error.message);
         }
       }
+
+      // モーダル外クリックで閉じる
+      window.onclick = function (event) {
+        const modal = document.getElementById("edit-modal");
+        if (event.target === modal) {
+          closeEditModal();
+        }
+      };
     </script>
   </body>
 </html>

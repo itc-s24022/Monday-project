@@ -111,20 +111,7 @@ def delete_task_form(task_id):
 
 @app.route('/api/task/add', methods=['POST'])
 def add_task():
-    """新規タスク登録
-    
-    Request Body (JSON):
-        {
-            "task_name": "タスク名",
-            "category": "カテゴリ",
-            "memo": "メモ (オプション)",
-            "firebase_uid": "ユーザーID (オプション)"
-        }
-    
-    Response:
-        201: {"success": true, "task": {...}}
-        400: {"error": "エラーメッセージ"}
-    """
+    """新規タスク登録"""
     data = request.get_json()
     task_name = data.get('task_name')
     category = data.get('category')
@@ -170,18 +157,7 @@ def get_today_tasks():
 
 @app.route('/api/task/start', methods=['POST'])
 def start_task():
-    """タイマー開始
-    
-    Request Body (JSON):
-        {
-            "task_id": 1,
-            "firebase_uid": "ユーザーID (オプション)"
-        }
-    
-    Response:
-        200: {"success": true, "task": {...}}
-        400/404: {"error": "エラーメッセージ"}
-    """
+    """タイマー開始"""
     data = request.get_json()
     task_id = data.get('task_id')
     
@@ -218,18 +194,7 @@ def start_task():
 
 @app.route('/api/task/stop', methods=['POST'])
 def stop_task():
-    """タイマー停止
-    
-    Request Body (JSON):
-        {
-            "task_id": 1,
-            "firebase_uid": "ユーザーID (オプション)"
-        }
-    
-    Response:
-        200: {"success": true, "task": {...}}
-        400/404: {"error": "エラーメッセージ"}
-    """
+    """タイマー停止"""
     data = request.get_json()
     task_id = data.get('task_id')
     
@@ -271,14 +236,60 @@ def stop_task():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/task/delete/<int:task_id>', methods=['POST'])
-def delete_task(task_id):
-    """タスク削除
+@app.route('/api/task/update/<int:task_id>', methods=['POST'])
+def update_task(task_id):
+    """タスク編集
+    
+    Request Body (JSON):
+        {
+            "task_name": "タスク名",
+            "category": "カテゴリ",
+            "memo": "メモ (オプション)",
+            "firebase_uid": "ユーザーID (オプション)"
+        }
     
     Response:
-        200: {"success": true, "message": "..."}
+        200: {"success": true, "task": {...}}
+        400: {"error": "エラーメッセージ"}
         404: {"error": "エラーメッセージ"}
     """
+    data = request.get_json()
+    task_name = data.get('task_name')
+    category = data.get('category')
+    memo = data.get('memo', '')
+    
+    if not task_name or not category:
+        return jsonify({'error': 'task_nameとcategoryは必須です'}), 400
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # タスクの存在確認
+        cur.execute("SELECT id FROM tasks WHERE id = %s", (task_id,))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'タスクが見つかりません'}), 404
+        
+        # タスクを更新
+        cur.execute("""
+            UPDATE tasks 
+            SET task_name = %s, category = %s, memo = %s
+            WHERE id = %s
+            RETURNING *
+        """, (task_name, category, memo, task_id))
+        updated_task = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'task': dict(updated_task)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/task/delete/<int:task_id>', methods=['POST'])
+def delete_task(task_id):
+    """タスク削除"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -299,17 +310,7 @@ def delete_task(task_id):
 
 @app.route('/api/report/monthly', methods=['GET'])
 def get_monthly_report():
-    """月次集計データ取得
-    
-    Query Parameters:
-        year: 年 (デフォルト: 現在の年)
-        month: 月 (デフォルト: 現在の月)
-        group_by: category または project (デフォルト: category)
-        firebase_uid: ユーザーID (オプション)
-    
-    Response:
-        200: {"success": true, "data": [...], "totals": {...}}
-    """
+    """月次集計データ取得"""
     year = request.args.get('year', type=int) or datetime.now().year
     month = request.args.get('month', type=int) or datetime.now().month
     group_by = request.args.get('group_by', 'category')
@@ -375,13 +376,7 @@ def get_monthly_report():
 
 @app.route('/api/export/csv', methods=['GET'])
 def export_csv():
-    """CSV形式でエクスポート
-    
-    Query Parameters:
-        year: 年 (デフォルト: 現在の年)
-        month: 月 (デフォルト: 現在の月)
-        firebase_uid: ユーザーID (オプション)
-    """
+    """CSV形式でエクスポート"""
     year = request.args.get('year', type=int) or datetime.now().year
     month = request.args.get('month', type=int) or datetime.now().month
     firebase_uid = request.args.get('firebase_uid')
@@ -452,4 +447,3 @@ def not_found(error):
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-
