@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
@@ -230,15 +230,16 @@
 
       .task-meta {
         display: flex;
-        gap: 15px;
+        gap: 10px;
         flex-wrap: wrap;
+        align-items: center;
       }
 
       .task-badge {
         display: inline-block;
-        padding: 4px 12px;
+        padding: 6px 12px;
         border-radius: 15px;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 500;
       }
 
@@ -250,6 +251,21 @@
       .badge-time {
         background: #f3e5f5;
         color: #7b1fa2;
+      }
+
+      .badge-start {
+        background: #fff3e0;
+        color: #e65100;
+      }
+
+      .badge-end {
+        background: #fce4ec;
+        color: #c2185b;
+      }
+
+      .badge-duration {
+        background: #e8eaf6;
+        color: #3f51b5;
       }
 
       .task-actions {
@@ -402,6 +418,15 @@
 
         .task-actions button {
           flex: 1;
+        }
+
+        .task-meta {
+          gap: 8px;
+        }
+
+        .task-badge {
+          font-size: 12px;
+          padding: 5px 10px;
         }
       }
     </style>
@@ -627,7 +652,7 @@
         }
       }
 
-      // タスク一覧を表示
+      // タスク一覧を表示（開始時刻・終了時刻・作業時間（秒）を追加）
       function displayTasks(tasks) {
         console.log("タスク表示:", tasks.length, "件");
         const container = document.getElementById("tasks-container");
@@ -640,31 +665,63 @@
 
         container.innerHTML = tasks
           .map((task) => {
-            const hours = task.duration_seconds
-              ? Math.floor(task.duration_seconds / 3600)
-              : 0;
-            const minutes = task.duration_seconds
-              ? Math.floor((task.duration_seconds % 3600) / 60)
-              : 0;
-            const timeText =
-              hours > 0
-                ? `${hours}時間 ${minutes}分`
-                : minutes > 0
-                  ? `${minutes}分`
-                  : "0分";
+            // 作業時間の計算
+            const totalSeconds = task.duration_seconds || 0;
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const secs = totalSeconds % 60;
+
+            let timeText = "";
+            if (hours > 0) {
+              timeText = `${hours}時間${minutes}分${secs}秒`;
+            } else if (minutes > 0) {
+              timeText = `${minutes}分${secs}秒`;
+            } else {
+              timeText = `${secs}秒`;
+            }
+
+            // 開始時刻・終了時刻のフォーマット
+            const startTime = task.start_time
+              ? new Date(task.start_time).toLocaleString("ja-JP", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })
+              : "-";
+            const endTime = task.end_time
+              ? new Date(task.end_time).toLocaleString("ja-JP", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })
+              : "-";
 
             return `
                     <div class="task-item">
                         <div class="task-info">
-                            <div class="task-name">${escapeHtml(task.task_name)}</div>
+                            <div class="task-name">${escapeHtml(
+                              task.task_name
+                            )}</div>
                             <div class="task-meta">
-                                <span class="task-badge badge-category">${escapeHtml(task.category)}</span>
-                                <span class="task-badge badge-time">${timeText}</span>
-                                ${task.memo ? `<div style="color: #666; font-size: 14px; margin-top: 5px;">${escapeHtml(task.memo)}</div>` : ""}
+                                <span class="task-badge badge-category">📁 ${escapeHtml(
+                                  task.category
+                                )}</span>
+                                <span class="task-badge badge-time">⏱ ${timeText}</span>
+                                <span class="task-badge badge-start">🕐 開始: ${startTime}</span>
+                                <span class="task-badge badge-end">🕑 終了: ${endTime}</span>
                             </div>
+                            ${
+                              task.memo
+                                ? `<div style="color: #666; font-size: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;">📝 ${escapeHtml(
+                                    task.memo
+                                  )}</div>`
+                                : ""
+                            }
                         </div>
                         <div class="task-actions">
-                            <button class="btn btn-danger btn-small" onclick="deleteTask(${task.id})">🗑 削除</button>
+                            <button class="btn btn-danger btn-small" onclick="deleteTask(${
+                              task.id
+                            })">🗑 削除</button>
                         </div>
                     </div>
                 `;
@@ -807,8 +864,11 @@
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = seconds % 60;
 
-        document.getElementById("timer").textContent =
-          `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+        document.getElementById("timer").textContent = `${String(
+          hours
+        ).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(
+          secs
+        ).padStart(2, "0")}`;
       }
 
       function saveTask() {
@@ -854,7 +914,7 @@
 
         try {
           const response = await fetch(
-            `/api/report/monthly?year=${year}&month=${month}&group_by=${groupBy}`,
+            `/api/report/monthly?year=${year}&month=${month}&group_by=${groupBy}`
           );
 
           if (!response.ok) {
@@ -871,8 +931,9 @@
 
           document.getElementById("total-days").textContent = `${totalDays}日`;
           document.getElementById("total-hours").textContent = `${totalHours}h`;
-          document.getElementById("total-tasks").textContent =
-            `${totalTasks}件`;
+          document.getElementById(
+            "total-tasks"
+          ).textContent = `${totalTasks}件`;
 
           // テーブルを更新
           displayReportTable(data.data || []);
@@ -927,7 +988,7 @@
 
         try {
           const response = await fetch(
-            `/api/export/csv?year=${year}&month=${month}`,
+            `/api/export/csv?year=${year}&month=${month}`
           );
 
           if (!response.ok) {
