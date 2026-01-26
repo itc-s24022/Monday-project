@@ -90,6 +90,46 @@
         }
       }
 
+      /* カレンダーセクション */
+      .calendar-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+
+      .current-date {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      .date-icon {
+        font-size: 28px;
+      }
+
+      .date-text {
+        font-size: 22px;
+      }
+
+      .today-stats {
+        font-size: 18px;
+        opacity: 0.95;
+        margin-top: 8px;
+      }
+
+      .stats-value {
+        font-weight: bold;
+        font-size: 20px;
+        color: #ffd700;
+      }
+
       /* タスク登録画面 */
       .task-form {
         background: #f9f9f9;
@@ -140,6 +180,10 @@
         font-variant-numeric: tabular-nums;
       }
 
+      .timer-display.stopped {
+        color: #999;
+      }
+
       .timer-buttons {
         display: flex;
         gap: 15px;
@@ -164,7 +208,7 @@
         color: white;
       }
 
-      .btn-primary:hover {
+      .btn-primary:hover:not(:disabled) {
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
       }
@@ -174,7 +218,7 @@
         color: white;
       }
 
-      .btn-success:hover {
+      .btn-success:hover:not(:disabled) {
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(56, 239, 125, 0.4);
       }
@@ -184,7 +228,7 @@
         color: white;
       }
 
-      .btn-danger:hover {
+      .btn-danger:hover:not(:disabled) {
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(238, 9, 121, 0.4);
       }
@@ -378,7 +422,8 @@
         .nav-tabs,
         .timer-section,
         .task-actions,
-        .btn {
+        .btn,
+        .calendar-section {
           display: none !important;
         }
 
@@ -428,6 +473,14 @@
           font-size: 12px;
           padding: 5px 10px;
         }
+
+        .current-date {
+          font-size: 20px;
+        }
+
+        .date-text {
+          font-size: 18px;
+        }
       }
     </style>
   </head>
@@ -452,6 +505,18 @@
         <h2 style="margin-bottom: 20px">本日のタスク</h2>
 
         <div class="task-form">
+          <!-- カレンダー表示 -->
+          <div class="calendar-section">
+            <div class="current-date">
+              <span class="date-icon">📅</span>
+              <span id="current-date" class="date-text"></span>
+            </div>
+            <div class="today-stats">
+              <span>本日の作業時間: </span>
+              <span id="today-total-hours" class="stats-value">0.0h</span>
+            </div>
+          </div>
+
           <div class="form-group">
             <label for="task-name">タスク名（プロジェクト名） *</label>
             <input
@@ -502,7 +567,21 @@
               >
                 ⏸ 停止
               </button>
-              <button class="btn btn-primary" onclick="saveTask()">
+              <button
+                class="btn btn-success"
+                id="resume-btn"
+                onclick="resumeTimer()"
+                disabled
+                style="display: none"
+              >
+                ▶ 再開
+              </button>
+              <button
+                class="btn btn-primary"
+                id="save-btn"
+                onclick="saveTask()"
+                disabled
+              >
                 💾 保存
               </button>
             </div>
@@ -612,11 +691,17 @@
       let timerInterval;
       let seconds = 0;
       let isRunning = false;
+      let isStopped = false; // 停止状態を追跡
       let currentTaskId = null;
 
-      // ページ読み込み時にタスク一覧を取得
+      // ページ読み込み時の処理
       document.addEventListener("DOMContentLoaded", function () {
         console.log("ページ読み込み完了");
+
+        // 現在の日付を表示
+        updateCurrentDate();
+
+        // タスク一覧を読み込み
         loadTodayTasks();
 
         // 現在の年月を設定
@@ -624,6 +709,36 @@
         document.getElementById("report-year").value = now.getFullYear();
         document.getElementById("report-month").value = now.getMonth() + 1;
       });
+
+      // 現在の日付を表示
+      function updateCurrentDate() {
+        const now = new Date();
+        const options = {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          weekday: "long",
+        };
+        const dateStr = now.toLocaleDateString("ja-JP", options);
+        document.getElementById("current-date").textContent = dateStr;
+      }
+
+      // 今日の総作業時間を計算して表示
+      function updateTodayTotalHours(tasks) {
+        if (!tasks || tasks.length === 0) {
+          document.getElementById("today-total-hours").textContent = "0.0h";
+          return;
+        }
+
+        const totalSeconds = tasks.reduce((sum, task) => {
+          return sum + (task.duration_seconds || 0);
+        }, 0);
+
+        const totalHours = (totalSeconds / 3600).toFixed(1);
+        document.getElementById(
+          "today-total-hours"
+        ).textContent = `${totalHours}h`;
+      }
 
       // 今日のタスク一覧を読み込む
       async function loadTodayTasks() {
@@ -645,14 +760,20 @@
 
           const data = await response.json();
           console.log("取得データ:", data);
-          displayTasks(data.tasks || []);
+          const tasks = data.tasks || [];
+
+          // タスク一覧を表示
+          displayTasks(tasks);
+
+          // 本日の総作業時間を更新
+          updateTodayTotalHours(tasks);
         } catch (error) {
           console.error("タスク取得エラー:", error);
           container.innerHTML = `<p style="text-align: center; color: #ff0000; padding: 20px;">エラー: ${error.message}</p>`;
         }
       }
 
-      // タスク一覧を表示（開始時刻・終了時刻・作業時間（秒）を追加）
+      // タスク一覧を表示
       function displayTasks(tasks) {
         console.log("タスク表示:", tasks.length, "件");
         const container = document.getElementById("tasks-container");
@@ -804,8 +925,13 @@
           }
 
           isRunning = true;
+          isStopped = false;
           document.getElementById("start-btn").disabled = true;
           document.getElementById("stop-btn").disabled = false;
+          document.getElementById("save-btn").disabled = true;
+
+          // タイマー表示を通常の色に戻す
+          document.getElementById("timer").classList.remove("stopped");
 
           timerInterval = setInterval(() => {
             seconds++;
@@ -820,43 +946,45 @@
       async function stopTimer() {
         if (!isRunning || !currentTaskId) return;
 
-        try {
-          // タイマー停止APIを呼ぶ
-          const response = await fetch("/api/task/stop", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              task_id: currentTaskId,
-            }),
-          });
+        // タイマーを一時停止（APIは呼ばない、ローカルで停止）
+        isRunning = false;
+        isStopped = true;
+        clearInterval(timerInterval);
 
-          if (!response.ok) {
-            throw new Error("タイマーの停止に失敗しました");
-          }
+        // タイマー表示をグレーアウト
+        document.getElementById("timer").classList.add("stopped");
 
-          isRunning = false;
-          clearInterval(timerInterval);
-          document.getElementById("start-btn").disabled = false;
-          document.getElementById("stop-btn").disabled = true;
+        // ボタンの状態を更新
+        document.getElementById("start-btn").disabled = true;
+        document.getElementById("stop-btn").disabled = true;
+        document.getElementById("stop-btn").style.display = "none";
+        document.getElementById("resume-btn").disabled = false;
+        document.getElementById("resume-btn").style.display = "inline-block";
+        document.getElementById("save-btn").disabled = false;
+      }
 
-          // フォームをリセット
-          document.getElementById("task-name").value = "";
-          document.getElementById("category").value = "";
-          document.getElementById("memo").value = "";
-          seconds = 0;
+      function resumeTimer() {
+        if (isRunning || !isStopped || !currentTaskId) return;
+
+        // タイマーを再開
+        isRunning = true;
+        isStopped = false;
+
+        // タイマー表示を通常の色に戻す
+        document.getElementById("timer").classList.remove("stopped");
+
+        // ボタンの状態を更新
+        document.getElementById("start-btn").disabled = true;
+        document.getElementById("resume-btn").disabled = true;
+        document.getElementById("resume-btn").style.display = "none";
+        document.getElementById("stop-btn").disabled = false;
+        document.getElementById("stop-btn").style.display = "inline-block";
+        document.getElementById("save-btn").disabled = true;
+
+        timerInterval = setInterval(() => {
+          seconds++;
           updateTimerDisplay();
-          currentTaskId = null;
-
-          // タスク一覧を再読み込み
-          loadTodayTasks();
-
-          alert("タスクを保存しました！");
-        } catch (error) {
-          console.error("エラー:", error);
-          alert("タスクの停止に失敗しました: " + error.message);
-        }
+        }, 1000);
       }
 
       function updateTimerDisplay() {
@@ -871,11 +999,61 @@
         ).padStart(2, "0")}`;
       }
 
-      function saveTask() {
-        if (isRunning) {
-          stopTimer();
-        } else {
+      async function saveTask() {
+        if (!currentTaskId) {
           alert("タスクを開始してから保存してください");
+          return;
+        }
+
+        try {
+          // タイマー停止APIを呼ぶ
+          const response = await fetch("/api/task/stop", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              task_id: currentTaskId,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("タスクの保存に失敗しました");
+          }
+
+          // タスク一覧を再読み込み
+          await loadTodayTasks();
+
+          // フォームをリセット
+          document.getElementById("task-name").value = "";
+          document.getElementById("category").value = "";
+          document.getElementById("memo").value = "";
+          seconds = 0;
+          updateTimerDisplay();
+          currentTaskId = null;
+          isStopped = false;
+          isRunning = false;
+
+          // ボタンの状態をリセット
+          document.getElementById("start-btn").disabled = false;
+          document.getElementById("stop-btn").disabled = true;
+          document.getElementById("stop-btn").style.display = "inline-block";
+          document.getElementById("resume-btn").disabled = true;
+          document.getElementById("resume-btn").style.display = "none";
+          document.getElementById("save-btn").disabled = true;
+
+          // タイマー表示を通常の色に戻す
+          document.getElementById("timer").classList.remove("stopped");
+
+          // タイマーが動いている場合は停止
+          if (timerInterval) {
+            clearInterval(timerInterval);
+          }
+
+          alert("タスクを保存しました！");
+        } catch (error) {
+          console.error("エラー:", error);
+          alert("タスクの保存に失敗しました: " + error.message);
         }
       }
 
