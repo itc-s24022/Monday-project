@@ -70,11 +70,11 @@ def test_add_task():
     
     for task in tasks:
         response = requests.post(
-            f"{BASE_URL}/task/add",
+            f"{BASE_URL}/api/task/add",
             json=task,
             headers={"Content-Type": "application/json"}
         )
-        print_response(response, f"POST /task/add - {task['task_name']}")
+        print_response(response, f"POST /api/task/add - {task['task_name']}")
         
         if response.status_code == 201:
             task_id = response.json().get('task', {}).get('id')
@@ -88,14 +88,14 @@ def test_start_task(task_id):
     print_section("3. タスク開始")
     
     response = requests.post(
-        f"{BASE_URL}/task/start",
+        f"{BASE_URL}/api/task/start",
         json={
             "task_id": task_id,
             "firebase_uid": TEST_FIREBASE_UID
         },
         headers={"Content-Type": "application/json"}
     )
-    print_response(response, f"POST /task/start - Task ID: {task_id}")
+    print_response(response, f"POST /api/task/start - Task ID: {task_id}")
     
     return response.status_code == 200
 
@@ -108,14 +108,14 @@ def test_stop_task(task_id):
     time.sleep(3)
     
     response = requests.post(
-        f"{BASE_URL}/task/stop",
+        f"{BASE_URL}/api/task/stop",
         json={
             "task_id": task_id,
             "firebase_uid": TEST_FIREBASE_UID
         },
         headers={"Content-Type": "application/json"}
     )
-    print_response(response, f"POST /task/stop - Task ID: {task_id}")
+    print_response(response, f"POST /api/task/stop - Task ID: {task_id}")
     
     return response.status_code == 200
 
@@ -186,13 +186,13 @@ def test_delete_task(task_id):
     print_section("7. タスク削除")
     
     response = requests.post(
-        f"{BASE_URL}/task/delete/{task_id}",
+        f"{BASE_URL}/api/task/delete/{task_id}",
         json={
             "firebase_uid": TEST_FIREBASE_UID
         },
         headers={"Content-Type": "application/json"}
     )
-    print_response(response, f"POST /task/delete/{task_id}")
+    print_response(response, f"POST /api/task/delete/{task_id}")
     
     return response.status_code == 200
 
@@ -202,27 +202,27 @@ def test_error_cases():
     
     # 必須パラメータなしでタスク追加
     response1 = requests.post(
-        f"{BASE_URL}/task/add",
+        f"{BASE_URL}/api/task/add",
         json={"memo": "メモのみ"},
         headers={"Content-Type": "application/json"}
     )
-    print_response(response1, "POST /task/add - 必須パラメータなし（エラーを期待）")
+    print_response(response1, "POST /api/task/add - 必須パラメータなし（エラーを期待）")
     
     # 存在しないタスクを開始
     response2 = requests.post(
-        f"{BASE_URL}/task/start",
+        f"{BASE_URL}/api/task/start",
         json={"task_id": 99999, "firebase_uid": TEST_FIREBASE_UID},
         headers={"Content-Type": "application/json"}
     )
-    print_response(response2, "POST /task/start - 存在しないタスク（エラーを期待）")
+    print_response(response2, "POST /api/task/start - 存在しないタスク（エラーを期待）")
     
     # 存在しないタスクを削除
     response3 = requests.post(
-        f"{BASE_URL}/task/delete/99999",
+        f"{BASE_URL}/api/task/delete/99999",
         json={"firebase_uid": TEST_FIREBASE_UID},
         headers={"Content-Type": "application/json"}
     )
-    print_response(response3, "POST /task/delete/99999 - 存在しないタスク（エラーを期待）")
+    print_response(response3, "POST /api/task/delete/99999 - 存在しないタスク（エラーを期待）")
 
 def run_all_tests():
     """すべてのテストを実行"""
@@ -324,3 +324,4 @@ if __name__ == "__main__":
     run_all_tests()
     
     print("\n✨ テスト完了")
+

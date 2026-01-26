@@ -7,20 +7,53 @@
 <body>
     <div class="container">
         <h1>Todo App</h1>
+        
         {% if db_info %}
         <div class="db-info">
             <strong>🐘 Database:</strong> {{ db_info.type }} - {{ db_info.database }}@{{ db_info.host }} (User: {{ db_info.user }})
         </div>
         {% endif %}
+        
+        <!-- 
+        ==========================================
+        📌 フロントエンド開発者へ
+        ==========================================
+        
+        🔥 APIエンドポイント一覧:
+        
+        POST /api/task/add
+          Body: {"task_name": "...", "category": "...", "memo": "..."}
+        
+        POST /api/task/start
+          Body: {"task_id": 123}
+        
+        POST /api/task/stop
+          Body: {"task_id": 123}
+        
+        POST /api/task/delete/<task_id>
+        
+        GET /api/report/monthly?year=2026&month=1
+        
+        GET /api/export/csv?year=2026&month=1
+        
+        ✅ 全てJSON形式で通信
+        ✅ 詳細はapp.pyのdocstring参照
+        ========================================== 
+        -->
+        
         <form method="POST" action="/add">
             <input type="text" name="title" id="title" placeholder="Add Todo" required>
             <button type="submit">Add</button>
         </form>
+        
         <ul>
-            {% for todo in todo_list %}
+            {% for task in tasks %}
             <li>
-                {{ todo.title }}
-                <form method="POST" action="/delete/{{ todo.id }}">
+                {{ task.task_name }} - {{ task.category }}
+                {% if task.memo %}
+                <span style="color: #666;">({{ task.memo }})</span>
+                {% endif %}
+                <form method="POST" action="/delete/{{ task.id }}" style="display: inline;">
                     <button type="submit">Delete</button>
                 </form>
             </li>
@@ -29,3 +62,4 @@
     </div>
 </body>
 </html>
+
