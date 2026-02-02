@@ -1,582 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>月次作業報告ツール</title>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
-        padding: 20px;
-      }
-
-      .container {
-        max-width: 1200px;
-        margin: 0 auto;
-      }
-
-      .header {
-        text-align: center;
-        color: white;
-        margin-bottom: 30px;
-      }
-
-      .header h1 {
-        font-size: 2.5em;
-        margin-bottom: 10px;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-      }
-
-      .nav-tabs {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 20px;
-        background: white;
-        border-radius: 10px;
-        padding: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      }
-
-      .nav-tab {
-        flex: 1;
-        padding: 15px 20px;
-        background: #f5f5f5;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
-        font-weight: 600;
-        transition: all 0.3s;
-      }
-
-      .nav-tab:hover {
-        background: #e0e0e0;
-      }
-
-      .nav-tab.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-      }
-
-      .tab-content {
-        display: none;
-        background: white;
-        border-radius: 15px;
-        padding: 30px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-      }
-
-      .tab-content.active {
-        display: block;
-        animation: fadeIn 0.3s;
-      }
-
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      /* カレンダーセクション */
-      .calendar-section {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 10px;
-        margin-bottom: 20px;
-        text-align: center;
-      }
-
-      .current-date {
-        font-size: 24px;
-        font-weight: bold;
-        margin-bottom: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-      }
-
-      .date-icon {
-        font-size: 28px;
-      }
-
-      .date-text {
-        font-size: 22px;
-      }
-
-      .today-stats {
-        font-size: 18px;
-        opacity: 0.95;
-        margin-top: 8px;
-      }
-
-      .stats-value {
-        font-weight: bold;
-        font-size: 20px;
-        color: #ffd700;
-      }
-
-      /* タスク登録画面 */
-      .task-form {
-        background: #f9f9f9;
-        padding: 25px;
-        border-radius: 10px;
-        margin-bottom: 30px;
-      }
-
-      .form-group {
-        margin-bottom: 20px;
-      }
-
-      .form-group label {
-        display: block;
-        margin-bottom: 8px;
-        font-weight: 600;
-        color: #333;
-      }
-
-      .form-group input,
-      .form-group select,
-      .form-group textarea {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        font-size: 16px;
-        transition: border-color 0.3s;
-      }
-
-      .form-group input:focus,
-      .form-group select:focus,
-      .form-group textarea:focus {
-        outline: none;
-        border-color: #667eea;
-      }
-
-      .timer-section {
-        text-align: center;
-        margin: 30px 0;
-      }
-
-      .timer-display {
-        font-size: 4em;
-        font-weight: bold;
-        color: #667eea;
-        margin: 20px 0;
-        font-variant-numeric: tabular-nums;
-      }
-
-      .timer-display.stopped {
-        color: #999;
-      }
-
-      .timer-buttons {
-        display: flex;
-        gap: 15px;
-        justify-content: center;
-        flex-wrap: wrap;
-      }
-
-      .btn {
-        padding: 15px 40px;
-        border: none;
-        border-radius: 50px;
-        font-size: 16px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-      }
-
-      .btn-primary {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-      }
-
-      .btn-primary:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-      }
-
-      .btn-success {
-        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-        color: white;
-      }
-
-      .btn-success:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(56, 239, 125, 0.4);
-      }
-
-      .btn-danger {
-        background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
-        color: white;
-      }
-
-      .btn-danger:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(238, 9, 121, 0.4);
-      }
-
-      .btn-warning {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        color: white;
-      }
-
-      .btn-warning:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
-      }
-
-      .btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none;
-      }
-
-      /* タスク一覧 */
-      .tasks-list {
-        margin-top: 30px;
-      }
-
-      .task-item {
-        background: white;
-        border: 2px solid #e0e0e0;
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 15px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        transition: all 0.3s;
-      }
-
-      .task-item:hover {
-        border-color: #667eea;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-      }
-
-      .task-info {
-        flex: 1;
-      }
-
-      .task-name {
-        font-size: 18px;
-        font-weight: 600;
-        color: #333;
-        margin-bottom: 8px;
-      }
-
-      .task-meta {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-
-      .task-badge {
-        display: inline-block;
-        padding: 6px 12px;
-        border-radius: 15px;
-        font-size: 13px;
-        font-weight: 500;
-      }
-
-      .badge-category {
-        background: #e3f2fd;
-        color: #1976d2;
-      }
-
-      .badge-time {
-        background: #f3e5f5;
-        color: #7b1fa2;
-      }
-
-      .badge-start {
-        background: #fff3e0;
-        color: #e65100;
-      }
-
-      .badge-end {
-        background: #fce4ec;
-        color: #c2185b;
-      }
-
-      .badge-duration {
-        background: #e8eaf6;
-        color: #3f51b5;
-      }
-
-      .task-actions {
-        display: flex;
-        gap: 10px;
-      }
-
-      .btn-small {
-        padding: 8px 16px;
-        font-size: 14px;
-        border-radius: 6px;
-      }
-
-      /* モーダル */
-      .modal {
-        display: none;
-        position: fixed;
-        z-index: 1000;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        animation: fadeIn 0.3s;
-      }
-
-      .modal.active {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-
-      .modal-content {
-        background: white;
-        padding: 30px;
-        border-radius: 15px;
-        max-width: 500px;
-        width: 90%;
-        max-height: 90vh;
-        overflow-y: auto;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-        animation: slideIn 0.3s;
-      }
-
-      @keyframes slideIn {
-        from {
-          transform: translateY(-50px);
-          opacity: 0;
-        }
-        to {
-          transform: translateY(0);
-          opacity: 1;
-        }
-      }
-
-      .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-        padding-bottom: 15px;
-        border-bottom: 2px solid #e0e0e0;
-      }
-
-      .modal-header h2 {
-        color: #333;
-        font-size: 24px;
-      }
-
-      .close-btn {
-        background: none;
-        border: none;
-        font-size: 28px;
-        color: #999;
-        cursor: pointer;
-        transition: color 0.3s;
-        padding: 0;
-        width: 40px;
-        height: 40px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .close-btn:hover {
-        color: #333;
-      }
-
-      .modal-footer {
-        display: flex;
-        gap: 10px;
-        justify-content: flex-end;
-        margin-top: 20px;
-        padding-top: 15px;
-        border-top: 2px solid #e0e0e0;
-      }
-
-      /* レポート画面 */
-      .report-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 30px;
-        flex-wrap: wrap;
-        gap: 20px;
-      }
-
-      .report-filters {
-        display: flex;
-        gap: 15px;
-        flex-wrap: wrap;
-      }
-
-      .report-filters select {
-        padding: 10px 15px;
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        font-size: 16px;
-      }
-
-      .summary-cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 20px;
-        margin-bottom: 30px;
-      }
-
-      .summary-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 25px;
-        border-radius: 15px;
-        text-align: center;
-      }
-
-      .summary-card h3 {
-        font-size: 14px;
-        opacity: 0.9;
-        margin-bottom: 10px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-      }
-
-      .summary-card .value {
-        font-size: 2.5em;
-        font-weight: bold;
-      }
-
-      .report-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 20px;
-      }
-
-      .report-table th {
-        background: #f5f5f5;
-        padding: 15px;
-        text-align: left;
-        font-weight: 600;
-        border-bottom: 2px solid #e0e0e0;
-      }
-
-      .report-table td {
-        padding: 15px;
-        border-bottom: 1px solid #e0e0e0;
-      }
-
-      .report-table tr:hover {
-        background: #f9f9f9;
-      }
-
-      .progress-bar {
-        width: 100%;
-        height: 8px;
-        background: #e0e0e0;
-        border-radius: 4px;
-        overflow: hidden;
-        margin-top: 8px;
-      }
-
-      .progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        transition: width 0.3s;
-      }
-
-      /* 印刷用CSS */
-      @media print {
-        body {
-          background: white;
-          padding: 0;
-        }
-
-        .nav-tabs,
-        .timer-section,
-        .task-actions,
-        .btn,
-        .calendar-section {
-          display: none !important;
-        }
-
-        .container {
-          max-width: 100%;
-        }
-
-        .tab-content {
-          box-shadow: none;
-          padding: 20px;
-        }
-
-        .report-table {
-          page-break-inside: avoid;
-        }
-      }
-
-      /* レスポンシブ */
-      @media (max-width: 768px) {
-        .header h1 {
-          font-size: 1.8em;
-        }
-
-        .timer-display {
-          font-size: 3em;
-        }
-
-        .task-item {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-
-        .task-actions {
-          margin-top: 15px;
-          width: 100%;
-        }
-
-        .task-actions button {
-          flex: 1;
-        }
-
-        .task-meta {
-          gap: 8px;
-        }
-
-        .task-badge {
-          font-size: 12px;
-          padding: 5px 10px;
-        }
-
-        .current-date {
-          font-size: 20px;
-        }
-
-        .date-text {
-          font-size: 18px;
-        }
-      }
-    </style>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
   </head>
   <body>
     <div class="container">
@@ -872,9 +303,8 @@
         }, 0);
 
         const totalHours = (totalSeconds / 3600).toFixed(1);
-        document.getElementById(
-          "today-total-hours"
-        ).textContent = `${totalHours}h`;
+        document.getElementById("today-total-hours").textContent =
+          `${totalHours}h`;
       }
 
       async function loadTodayTasks() {
@@ -945,11 +375,11 @@
                     <div class="task-item">
                         <div class="task-info">
                             <div class="task-name">${escapeHtml(
-                              task.task_name
+                              task.task_name,
                             )}</div>
                             <div class="task-meta">
                                 <span class="task-badge badge-category">📁 ${escapeHtml(
-                                  task.category
+                                  task.category,
                                 )}</span>
                                 <span class="task-badge badge-time">⏱ ${timeText}</span>
                                 <span class="task-badge badge-start">🕐 開始: ${startTime}</span>
@@ -958,7 +388,7 @@
                             ${
                               task.memo
                                 ? `<div style="color: #666; font-size: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;">📝 ${escapeHtml(
-                                    task.memo
+                                    task.memo,
                                   )}</div>`
                                 : ""
                             }
@@ -1107,9 +537,9 @@
         const secs = seconds % 60;
 
         document.getElementById("timer").textContent = `${String(
-          hours
+          hours,
         ).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(
-          secs
+          secs,
         ).padStart(2, "0")}`;
       }
 
@@ -1268,7 +698,7 @@
 
         try {
           const response = await fetch(
-            `/api/report/monthly?year=${year}&month=${month}&group_by=${groupBy}`
+            `/api/report/monthly?year=${year}&month=${month}&group_by=${groupBy}`,
           );
 
           if (!response.ok) {
@@ -1283,9 +713,8 @@
 
           document.getElementById("total-days").textContent = `${totalDays}日`;
           document.getElementById("total-hours").textContent = `${totalHours}h`;
-          document.getElementById(
-            "total-tasks"
-          ).textContent = `${totalTasks}件`;
+          document.getElementById("total-tasks").textContent =
+            `${totalTasks}件`;
 
           displayReportTable(data.data || []);
         } catch (error) {
@@ -1339,7 +768,7 @@
 
         try {
           const response = await fetch(
-            `/api/export/csv?year=${year}&month=${month}`
+            `/api/export/csv?year=${year}&month=${month}`,
           );
 
           if (!response.ok) {
