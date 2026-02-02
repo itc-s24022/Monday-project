@@ -395,8 +395,10 @@
         }
 
         // 次月の日付で埋める
-        const remainingCells = 42 - (firstDayOfWeek + daysInMonth); // 6週間分
-        for (let day = 1; day <= remainingCells; day++) {
+        const totalCells = firstDayOfWeek + daysInMonth;
+        const rows = Math.ceil(totalCells / 7);
+        const cellsToFill = rows * 7 - totalCells;
+        for (let day = 1; day <= cellsToFill; day++) {
           const dayDiv = document.createElement("div");
           dayDiv.className = "calendar-day other-month";
           dayDiv.textContent = day;
