@@ -1,15 +1,35 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>月次作業報告ツール</title>
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='style.css') }}"
-    />
-  </head>
-  <body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>月次作業報告ツール</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+
+<body>
+  <!-- ===== ログイン画面 ===== -->
+  <div id="auth-box" style="max-width: 520px; margin: 40px auto; display: none;">
+    <h2 style="margin-bottom: 10px;">ログイン</h2>
+    <input id="login-email" type="email" placeholder="Email" 
+           style="width: 100%; padding: 10px; margin: 6px 0; border: 1px solid #ddd; border-radius: 8px;" />
+    <input id="login-password" type="password" placeholder="Password" 
+           style="width: 100%; padding: 10px; margin: 6px 0; border: 1px solid #ddd; border-radius: 8px;" />
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
+      <button class="btn btn-primary btn-small" onclick="loginWithEmail()">メールでログイン</button>
+      <button class="btn btn-success btn-small" onclick="signupWithEmail()">新規登録（メール）</button>
+      <button class="btn btn-warning btn-small" onclick="loginWithGoogle()">Googleでログイン</button>
+    </div>
+    <p id="auth-error" style="color: #d00; margin-top: 10px;"></p>
+  </div>
+
+  <!-- ===== メインアプリ ===== -->
+  <div id="app-box" style="display: none;">
+    <div style="text-align: right; max-width: 1200px; margin: 10px auto 0;">
+      ログイン中: <span id="auth-user"></span>
+      <button class="btn btn-danger btn-small" onclick="logout()">ログアウト</button>
+    </div>
+
     <div class="container">
       <div class="header">
         <h1>📊 月次作業報告ツール</h1>
@@ -17,47 +37,31 @@
       </div>
 
       <div class="nav-tabs">
-        <button class="nav-tab active" onclick="switchTab('task')">
-          📝 タスク登録
-        </button>
-        <button class="nav-tab" onclick="switchTab('report')">
-          📈 月次レポート
-        </button>
+        <button class="nav-tab active" onclick="switchTab('task')">📝 タスク登録</button>
+        <button class="nav-tab" onclick="switchTab('report')">📈 月次レポート</button>
       </div>
 
       <!-- タスク登録画面 -->
       <div id="task-tab" class="tab-content active">
-        <h2 style="margin-bottom: 20px">タスク管理</h2>
+        <h2 style="margin-bottom: 20px;">タスク管理</h2>
 
         <div class="task-form">
           <!-- カレンダー表示 -->
           <div class="calendar-section">
             <div class="calendar-header">
-              <button class="calendar-nav-btn" onclick="changeMonth(-1)">
-                ◀
-              </button>
-              <div class="calendar-title">
-                <span id="calendar-month-year"></span>
-              </div>
-              <button class="calendar-nav-btn" onclick="changeMonth(1)">
-                ▶
-              </button>
-              <button class="calendar-today-btn" onclick="goToToday()">
-                今日
-              </button>
+              <button class="calendar-nav-btn" onclick="changeMonth(-1)">◀</button>
+              <div class="calendar-title"><span id="calendar-month-year"></span></div>
+              <button class="calendar-nav-btn" onclick="changeMonth(1)">▶</button>
+              <button class="calendar-today-btn" onclick="goToToday()">今日</button>
             </div>
+
             <div class="calendar-weekdays">
-              <div>日</div>
-              <div>月</div>
-              <div>火</div>
-              <div>水</div>
-              <div>木</div>
-              <div>金</div>
-              <div>土</div>
+              <div>日</div><div>月</div><div>火</div><div>水</div>
+              <div>木</div><div>金</div><div>土</div>
             </div>
-            <div class="calendar-grid" id="calendar-grid">
-              <!-- カレンダーはJavaScriptで動的に生成 -->
-            </div>
+
+            <div class="calendar-grid" id="calendar-grid"></div>
+
             <div class="current-date-info">
               <div class="current-date">
                 <span class="date-icon">📅</span>
@@ -71,13 +75,8 @@
           </div>
 
           <div class="form-group">
-            <label for="task-name">タスク名（プロジェクト名）</label>
-            <input
-              type="text"
-              id="task-name"
-              placeholder="例: バックエンド開発"
-              maxlength="100"
-            />
+            <label for="task-name">タスク名（プロジェクト名） *</label>
+            <input type="text" id="task-name" placeholder="例: バックエンド開発" maxlength="100" />
           </div>
 
           <div class="form-group">
@@ -94,58 +93,23 @@
 
           <div class="form-group">
             <label for="memo">メモ</label>
-            <textarea
-              id="memo"
-              rows="3"
-              placeholder="作業内容の詳細など..."
-              maxlength="500"
-            ></textarea>
+            <textarea id="memo" rows="3" placeholder="作業内容の詳細など..." maxlength="500"></textarea>
           </div>
 
           <div class="timer-section">
             <div class="timer-display" id="timer">00:00:00</div>
             <div class="timer-buttons">
-              <button
-                class="btn btn-success"
-                id="start-btn"
-                onclick="startTimer()"
-              >
-                ▶ 開始
-              </button>
-              <button
-                class="btn btn-danger"
-                id="stop-btn"
-                onclick="stopTimer()"
-                disabled
-              >
-                ⏸ 停止
-              </button>
-              <button
-                class="btn btn-success"
-                id="resume-btn"
-                onclick="resumeTimer()"
-                disabled
-                style="display: none"
-              >
-                ▶ 再開
-              </button>
-              <button
-                class="btn btn-primary"
-                id="save-btn"
-                onclick="saveTask()"
-                disabled
-              >
-                💾 保存
-              </button>
+              <button class="btn btn-success" id="start-btn" onclick="startTimer()">▶ 開始</button>
+              <button class="btn btn-danger" id="stop-btn" onclick="stopTimer()" disabled>⏸ 停止</button>
+              <button class="btn btn-success" id="resume-btn" onclick="resumeTimer()" disabled style="display: none;">▶ 再開</button>
+              <button class="btn btn-primary" id="save-btn" onclick="saveTask()" disabled>💾 保存</button>
             </div>
           </div>
         </div>
 
         <div class="tasks-list">
-          <h3 style="margin-bottom: 15px">選択日の作業履歴</h3>
-          <div id="tasks-container">
-            <!-- タスクはJavaScriptで動的に表示 -->
-          </div>
+          <h3 style="margin-bottom: 15px;">選択日の作業履歴</h3>
+          <div id="tasks-container"></div>
         </div>
       </div>
 
@@ -159,36 +123,22 @@
               <option value="2025">2025年</option>
               <option value="2024">2024年</option>
             </select>
+
             <select id="report-month">
-              <option value="1">1月</option>
-              <option value="2">2月</option>
-              <option value="3">3月</option>
-              <option value="4">4月</option>
-              <option value="5">5月</option>
-              <option value="6">6月</option>
-              <option value="7">7月</option>
-              <option value="8">8月</option>
-              <option value="9">9月</option>
-              <option value="10">10月</option>
-              <option value="11">11月</option>
-              <option value="12">12月</option>
+              <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+              <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+              <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+              <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
             </select>
+
             <select id="group-by">
               <option value="category">カテゴリ別</option>
               <option value="project">プロジェクト別</option>
             </select>
-            <button
-              class="btn btn-primary btn-small"
-              onclick="generateReport()"
-            >
-              🔍 集計
-            </button>
-            <button class="btn btn-success btn-small" onclick="exportCSV()">
-              📥 CSV出力
-            </button>
-            <button class="btn btn-primary btn-small" onclick="window.print()">
-              🖨️ 印刷
-            </button>
+
+            <button class="btn btn-primary btn-small" onclick="generateReport()">🔍 集計</button>
+            <button class="btn btn-success btn-small" onclick="exportCSV()">📥 CSV出力</button>
+            <button class="btn btn-primary btn-small" onclick="window.print()">🖨️ 印刷</button>
           </div>
         </div>
 
@@ -197,21 +147,11 @@
             <h3>総作業日数</h3>
             <div class="value" id="total-days">-</div>
           </div>
-          <div
-            class="summary-card"
-            style="
-              background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            "
-          >
+          <div class="summary-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
             <h3>総作業時間</h3>
             <div class="value" id="total-hours">-</div>
           </div>
-          <div
-            class="summary-card"
-            style="
-              background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
-            "
-          >
+          <div class="summary-card" style="background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);">
             <h3>タスク件数</h3>
             <div class="value" id="total-tasks">-</div>
           </div>
@@ -228,10 +168,7 @@
           </thead>
           <tbody id="report-table-body">
             <tr>
-              <td
-                colspan="4"
-                style="text-align: center; padding: 40px; color: #999"
-              >
+              <td colspan="4" style="text-align: center; padding: 40px; color: #999;">
                 「集計」ボタンをクリックしてレポートを生成してください
               </td>
             </tr>
@@ -250,12 +187,7 @@
 
         <div class="form-group">
           <label for="edit-task-name">タスク名（プロジェクト名） *</label>
-          <input
-            type="text"
-            id="edit-task-name"
-            placeholder="例: バックエンド開発"
-            maxlength="100"
-          />
+          <input type="text" id="edit-task-name" maxlength="100" />
         </div>
 
         <div class="form-group">
@@ -272,699 +204,581 @@
 
         <div class="form-group">
           <label for="edit-memo">メモ</label>
-          <textarea
-            id="edit-memo"
-            rows="3"
-            placeholder="作業内容の詳細など..."
-            maxlength="500"
-          ></textarea>
+          <textarea id="edit-memo" rows="3" maxlength="500"></textarea>
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-primary btn-small" onclick="saveEditTask()">
-            💾 保存
-          </button>
-          <button class="btn btn-danger btn-small" onclick="closeEditModal()">
-            キャンセル
-          </button>
+          <button class="btn btn-primary btn-small" onclick="saveEditTask()">💾 保存</button>
+          <button class="btn btn-danger btn-small" onclick="closeEditModal()">キャンセル</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <script>
-      let timerInterval;
-      let seconds = 0;
-      let isRunning = false;
-      let isStopped = false;
-      let currentTaskId = null;
-      let editingTaskId = null;
+  <!-- ===== Firebase Auth + JavaScript ===== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
+             createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-      // カレンダー関連の変数
-      let currentCalendarDate = new Date();
-      let selectedDate = new Date();
+    // ★あなたのFirebase設定に差し替えてください
+    const firebaseConfig = {
+      apiKey: "AIzaSyBV5NIf7e-lsyvW5ybkbgABNzK_sWRRuvI",
+      authDomain: "monday-project-6fbf3.firebaseapp.com",
+      projectId: "monday-project-6fbf3",
+      storageBucket: "monday-project-6fbf3.firebasestorage.app",
+      messagingSenderId: "930616423237",
+      appId: "1:930616423237:web:93fd6fb767be3f8409442c",
+      measurementId: "G-PKZ0MYLPS0"
+    };
 
-      // ページ読み込み時の処理
-      document.addEventListener("DOMContentLoaded", function () {
-        selectedDate = new Date(); // 今日の日付を選択状態に
+    const fbApp = initializeApp(firebaseConfig);
+    const fbAuth = getAuth(fbApp);
+
+    // 認証済みフェッチ
+    async function getIdTokenOrThrow() {
+      const user = fbAuth.currentUser;
+      if (!user) throw new Error("未ログインです");
+      return await user.getIdToken();
+    }
+
+    async function authedFetch(url, options = {}) {
+      const idToken = await getIdTokenOrThrow();
+      const headers = options.headers || {};
+      return fetch(url, {
+        ...options,
+        headers: { ...headers, Authorization: `Bearer ${idToken}` }
+      });
+    }
+
+    // グローバル公開
+    window.loginWithGoogle = async function() {
+      document.getElementById("auth-error").textContent = "";
+      try {
+        await signInWithPopup(fbAuth, new GoogleAuthProvider());
+      } catch (e) {
+        document.getElementById("auth-error").textContent = e.message;
+      }
+    };
+
+    window.loginWithEmail = async function() {
+      document.getElementById("auth-error").textContent = "";
+      try {
+        const email = document.getElementById("login-email").value;
+        const password = document.getElementById("login-password").value;
+        await signInWithEmailAndPassword(fbAuth, email, password);
+      } catch (e) {
+        document.getElementById("auth-error").textContent = e.message;
+      }
+    };
+
+    window.signupWithEmail = async function() {
+      document.getElementById("auth-error").textContent = "";
+      try {
+        const email = document.getElementById("login-email").value;
+        const password = document.getElementById("login-password").value;
+        await createUserWithEmailAndPassword(fbAuth, email, password);
+      } catch (e) {
+        document.getElementById("auth-error").textContent = e.message;
+      }
+    };
+
+    window.logout = async function() {
+      await signOut(fbAuth);
+    };
+
+    // ===== タスク管理JavaScript =====
+    let timerInterval, seconds = 0, isRunning = false, isStopped = false;
+    let currentTaskId = null, editingTaskId = null;
+    let currentCalendarDate = new Date(), selectedDate = new Date();
+
+    onAuthStateChanged(fbAuth, (user) => {
+      const authBox = document.getElementById("auth-box");
+      const appBox = document.getElementById("app-box");
+      const userBox = document.getElementById("auth-user");
+
+      if (user) {
+        authBox.style.display = "none";
+        appBox.style.display = "block";
+        userBox.textContent = user.email || user.uid;
+
+        selectedDate = new Date();
         renderCalendar();
         updateCurrentDate();
         loadTasksForSelectedDate();
+
         const now = new Date();
         document.getElementById("report-year").value = now.getFullYear();
         document.getElementById("report-month").value = now.getMonth() + 1;
-      });
+      } else {
+        authBox.style.display = "block";
+        appBox.style.display = "none";
+        userBox.textContent = "";
+      }
+    });
 
-      // カレンダー描画関数
-      function renderCalendar() {
-        const year = currentCalendarDate.getFullYear();
-        const month = currentCalendarDate.getMonth();
+    function renderCalendar() {
+      const year = currentCalendarDate.getFullYear();
+      const month = currentCalendarDate.getMonth();
+      const monthNames = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+      document.getElementById("calendar-month-year").textContent = `${year}年 ${monthNames[month]}`;
 
-        // 月・年の表示
-        const monthNames = [
-          "1月",
-          "2月",
-          "3月",
-          "4月",
-          "5月",
-          "6月",
-          "7月",
-          "8月",
-          "9月",
-          "10月",
-          "11月",
-          "12月",
-        ];
-        document.getElementById(
-          "calendar-month-year"
-        ).textContent = `${year}年 ${monthNames[month]}`;
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const firstDayOfWeek = firstDay.getDay();
+      const daysInMonth = lastDay.getDate();
 
-        // 月の最初の日と最後の日を取得
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const firstDayOfWeek = firstDay.getDay(); // 0 = 日曜日
-        const daysInMonth = lastDay.getDate();
+      const calendarGrid = document.getElementById("calendar-grid");
+      calendarGrid.innerHTML = "";
 
-        // カレンダーグリッドをクリア
-        const calendarGrid = document.getElementById("calendar-grid");
-        calendarGrid.innerHTML = "";
-
-        // 前月の日付で埋める
-        const prevMonthLastDay = new Date(year, month, 0).getDate();
-        for (let i = firstDayOfWeek - 1; i >= 0; i--) {
-          const dayDiv = document.createElement("div");
-          dayDiv.className = "calendar-day other-month";
-          dayDiv.textContent = prevMonthLastDay - i;
-          calendarGrid.appendChild(dayDiv);
-        }
-
-        // 今日の日付
-        const today = new Date();
-        const isCurrentMonth =
-          today.getFullYear() === year && today.getMonth() === month;
-
-        // 当月の日付
-        for (let day = 1; day <= daysInMonth; day++) {
-          const dayDiv = document.createElement("div");
-          dayDiv.className = "calendar-day";
-          dayDiv.textContent = day;
-
-          const currentDate = new Date(year, month, day);
-
-          // 今日の日付にマーク
-          if (isCurrentMonth && today.getDate() === day) {
-            dayDiv.classList.add("today");
-          }
-
-          // 選択中の日付にマーク
-          if (
-            selectedDate.getFullYear() === year &&
-            selectedDate.getMonth() === month &&
-            selectedDate.getDate() === day
-          ) {
-            dayDiv.classList.add("selected");
-          }
-
-          // 未来の日付を無効化
-          if (currentDate > today) {
-            dayDiv.classList.add("future");
-          } else {
-            dayDiv.onclick = () => selectDate(year, month, day);
-          }
-
-          calendarGrid.appendChild(dayDiv);
-        }
-
-        // 次月の日付で埋める
-        const totalCells = firstDayOfWeek + daysInMonth;
-        const rows = Math.ceil(totalCells / 7);
-        const cellsToFill = rows * 7 - totalCells;
-        for (let day = 1; day <= cellsToFill; day++) {
-          const dayDiv = document.createElement("div");
-          dayDiv.className = "calendar-day other-month";
-          dayDiv.textContent = day;
-          calendarGrid.appendChild(dayDiv);
-        }
+      const prevMonthLastDay = new Date(year, month, 0).getDate();
+      for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+        const dayDiv = document.createElement("div");
+        dayDiv.className = "calendar-day other-month";
+        dayDiv.textContent = prevMonthLastDay - i;
+        calendarGrid.appendChild(dayDiv);
       }
 
-      // 日付選択
-      function selectDate(year, month, day) {
-        selectedDate = new Date(year, month, day);
-        renderCalendar();
-        updateCurrentDate();
-        loadTasksForSelectedDate();
-      }
+      const today = new Date();
+      const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
 
-      // 月を変更
-      function changeMonth(delta) {
-        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
-        renderCalendar();
-      }
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayDiv = document.createElement("div");
+        dayDiv.className = "calendar-day";
+        dayDiv.textContent = day;
 
-      // 今日に戻る
-      function goToToday() {
-        const today = new Date();
-        currentCalendarDate = new Date(today);
-        selectedDate = new Date(today);
-        renderCalendar();
-        updateCurrentDate();
-        loadTasksForSelectedDate();
-      }
+        const currentDate = new Date(year, month, day);
 
-      function updateCurrentDate() {
-        const options = {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-          weekday: "long",
-        };
-        const dateStr = selectedDate.toLocaleDateString("ja-JP", options);
-        document.getElementById("current-date").textContent = dateStr;
-      }
+        if (isCurrentMonth && today.getDate() === day) dayDiv.classList.add("today");
+        if (selectedDate.getFullYear() === year && selectedDate.getMonth() === month && selectedDate.getDate() === day) 
+          dayDiv.classList.add("selected");
 
-      function updateTodayTotalHours(tasks) {
-        if (!tasks || tasks.length === 0) {
-          document.getElementById("today-total-hours").textContent = "0.0h";
-          return;
-        }
-
-        const totalSeconds = tasks.reduce((sum, task) => {
-          return sum + (task.duration_seconds || 0);
-        }, 0);
-
-        const totalHours = (totalSeconds / 3600).toFixed(1);
-        document.getElementById(
-          "today-total-hours"
-        ).textContent = `${totalHours}h`;
-      }
-
-      async function loadTasksForSelectedDate() {
-        const container = document.getElementById("tasks-container");
-        container.innerHTML =
-          '<p style="text-align: center; color: #666; padding: 20px;">読み込み中...</p>';
-
-        try {
-          // 選択された日付のYYYY-MM-DD形式の文字列を作成
-          const dateStr = selectedDate.toISOString().split("T")[0];
-
-          const response = await fetch(`/api/tasks/date?date=${dateStr}`);
-
-          if (!response.ok) {
-            // 404の場合はタスクがないだけなので、空配列として処理
-            if (response.status === 404) {
-              displayTasks([]);
-              updateTodayTotalHours([]);
-              return;
-            }
-            container.innerHTML =
-              '<p style="text-align: center; color: #ff0000; padding: 20px;">エラー: タスクの読み込みに失敗しました</p>';
-            return;
-          }
-
-          const data = await response.json();
-          const tasks = data.tasks || [];
-          displayTasks(tasks);
-          updateTodayTotalHours(tasks);
-        } catch (error) {
-          console.error("タスク取得エラー:", error);
-          container.innerHTML = `<p style="text-align: center; color: #ff0000; padding: 20px;">エラー: ${error.message}</p>`;
-        }
-      }
-
-      // 今日のタスク読み込み（互換性のため残す）
-      async function loadTodayTasks() {
-        await loadTasksForSelectedDate();
-      }
-
-      function displayTasks(tasks) {
-        const container = document.getElementById("tasks-container");
-
-        if (!tasks || tasks.length === 0) {
-          container.innerHTML =
-            '<p style="text-align: center; color: #999; padding: 40px;">この日はタスクがありません</p>';
-          return;
-        }
-
-        container.innerHTML = tasks
-          .map((task) => {
-            const totalSeconds = task.duration_seconds || 0;
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const secs = totalSeconds % 60;
-
-            let timeText = "";
-            if (hours > 0) {
-              timeText = `${hours}時間${minutes}分${secs}秒`;
-            } else if (minutes > 0) {
-              timeText = `${minutes}分${secs}秒`;
-            } else {
-              timeText = `${secs}秒`;
-            }
-
-            const startTime = task.start_time
-              ? new Date(task.start_time).toLocaleString("ja-JP", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })
-              : "-";
-            const endTime = task.end_time
-              ? new Date(task.end_time).toLocaleString("ja-JP", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })
-              : "-";
-
-            return `
-                    <div class="task-item">
-                        <div class="task-info">
-                            <div class="task-name">${escapeHtml(
-                              task.task_name
-                            )}</div>
-                            <div class="task-meta">
-                                <span class="task-badge badge-category">📁 ${escapeHtml(
-                                  task.category
-                                )}</span>
-                                <span class="task-badge badge-time">⏱ ${timeText}</span>
-                                <span class="task-badge badge-start">🕐 開始: ${startTime}</span>
-                                <span class="task-badge badge-end">🕑 終了: ${endTime}</span>
-                            </div>
-                            ${
-                              task.memo
-                                ? `<div style="color: #666; font-size: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;">📝 ${escapeHtml(
-                                    task.memo
-                                  )}</div>`
-                                : ""
-                            }
-                        </div>
-                        <div class="task-actions">
-                            <button class="btn btn-warning btn-small" onclick="openEditModal(${
-                              task.id
-                            })">✏️ 編集</button>
-                            <button class="btn btn-danger btn-small" onclick="deleteTask(${
-                              task.id
-                            })">🗑 削除</button>
-                        </div>
-                    </div>
-                `;
-          })
-          .join("");
-      }
-
-      function escapeHtml(text) {
-        const div = document.createElement("div");
-        div.textContent = text;
-        return div.innerHTML;
-      }
-
-      function switchTab(tab) {
-        document
-          .querySelectorAll(".nav-tab")
-          .forEach((t) => t.classList.remove("active"));
-        document
-          .querySelectorAll(".tab-content")
-          .forEach((c) => c.classList.remove("active"));
-
-        if (tab === "task") {
-          document
-            .querySelector(".nav-tab:first-child")
-            .classList.add("active");
-          document.getElementById("task-tab").classList.add("active");
+        if (currentDate > today) {
+          dayDiv.classList.add("future");
         } else {
-          document.querySelector(".nav-tab:last-child").classList.add("active");
-          document.getElementById("report-tab").classList.add("active");
-        }
-      }
-
-      async function startTimer() {
-        if (isRunning) return;
-
-        const taskName = document.getElementById("task-name").value;
-        const category = document.getElementById("category").value;
-        const memo = document.getElementById("memo").value;
-
-        if (!taskName || !category) {
-          alert("タスク名とカテゴリを入力してから開始してください");
-          return;
+          dayDiv.onclick = () => selectDate(year, month, day);
         }
 
-        try {
-          // 選択された日付をISO形式で送信
-          const dateStr = selectedDate.toISOString().split("T")[0];
-
-          const response = await fetch("/api/task/add", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              task_name: taskName,
-              category: category,
-              memo: memo,
-              created_date: dateStr,
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error("タスクの登録に失敗しました");
-          }
-
-          const data = await response.json();
-          currentTaskId = data.task.id;
-
-          const startResponse = await fetch("/api/task/start", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              task_id: currentTaskId,
-            }),
-          });
-
-          if (!startResponse.ok) {
-            throw new Error("タイマーの開始に失敗しました");
-          }
-
-          isRunning = true;
-          isStopped = false;
-          document.getElementById("start-btn").disabled = true;
-          document.getElementById("stop-btn").disabled = false;
-          document.getElementById("save-btn").disabled = true;
-          document.getElementById("timer").classList.remove("stopped");
-
-          timerInterval = setInterval(() => {
-            seconds++;
-            updateTimerDisplay();
-          }, 1000);
-        } catch (error) {
-          console.error("エラー:", error);
-          alert("タスクの開始に失敗しました: " + error.message);
-        }
+        calendarGrid.appendChild(dayDiv);
       }
 
-      async function stopTimer() {
-        if (!isRunning || !currentTaskId) return;
+      const totalCells = firstDayOfWeek + daysInMonth;
+      const rows = Math.ceil(totalCells / 7);
+      const cellsToFill = rows * 7 - totalCells;
+      for (let day = 1; day <= cellsToFill; day++) {
+        const dayDiv = document.createElement("div");
+        dayDiv.className = "calendar-day other-month";
+        dayDiv.textContent = day;
+        calendarGrid.appendChild(dayDiv);
+      }
+    }
 
-        isRunning = false;
-        isStopped = true;
-        clearInterval(timerInterval);
+    function selectDate(year, month, day) {
+      selectedDate = new Date(year, month, day);
+      renderCalendar();
+      updateCurrentDate();
+      loadTasksForSelectedDate();
+    }
 
-        document.getElementById("timer").classList.add("stopped");
-        document.getElementById("start-btn").disabled = true;
-        document.getElementById("stop-btn").disabled = true;
-        document.getElementById("stop-btn").style.display = "none";
-        document.getElementById("resume-btn").disabled = false;
-        document.getElementById("resume-btn").style.display = "inline-block";
-        document.getElementById("save-btn").disabled = false;
+    window.changeMonth = function(delta) {
+      currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+      renderCalendar();
+    };
+
+    window.goToToday = function() {
+      const today = new Date();
+      currentCalendarDate = new Date(today);
+      selectedDate = new Date(today);
+      renderCalendar();
+      updateCurrentDate();
+      loadTasksForSelectedDate();
+    };
+
+    function updateCurrentDate() {
+      const options = { year: "numeric", month: "long", day: "numeric", weekday: "long" };
+      document.getElementById("current-date").textContent = selectedDate.toLocaleDateString("ja-JP", options);
+    }
+
+    function updateTodayTotalHours(tasks) {
+      const totalSeconds = (tasks || []).reduce((sum, task) => sum + (task.duration_seconds || 0), 0);
+      document.getElementById("today-total-hours").textContent = `${(totalSeconds / 3600).toFixed(1)}h`;
+    }
+
+    async function loadTasksForSelectedDate() {
+      const container = document.getElementById("tasks-container");
+      container.innerHTML = '<p style="text-align:center;color:#666;padding:20px;">読み込み中...</p>';
+
+      try {
+        const dateStr = selectedDate.toISOString().split("T")[0];
+        const response = await authedFetch(`/api/tasks/date?date=${dateStr}`);
+        if (!response.ok) throw new Error("タスクの読み込みに失敗しました");
+
+        const data = await response.json();
+        displayTasks(data.tasks || []);
+        updateTodayTotalHours(data.tasks || []);
+      } catch (error) {
+        console.error("タスク取得エラー:", error);
+        container.innerHTML = `<p style="text-align:center;color:#d00;padding:20px;">エラー: ${error.message}</p>`;
+      }
+    }
+
+    function displayTasks(tasks) {
+      const container = document.getElementById("tasks-container");
+      if (!tasks || tasks.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#999;padding:40px;">この日はタスクがありません</p>';
+        return;
       }
 
-      function resumeTimer() {
-        if (isRunning || !isStopped || !currentTaskId) return;
+      container.innerHTML = tasks.map((task) => {
+        const totalSeconds = task.duration_seconds || 0;
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const secs = totalSeconds % 60;
+
+        let timeText = hours > 0 ? `${hours}時間${minutes}分${secs}秒` : 
+                       minutes > 0 ? `${minutes}分${secs}秒` : `${secs}秒`;
+
+        const startTime = task.start_time ? new Date(task.start_time).toLocaleTimeString("ja-JP") : "-";
+        const endTime = task.end_time ? new Date(task.end_time).toLocaleTimeString("ja-JP") : "-";
+
+        return `
+          <div class="task-item">
+            <div class="task-info">
+              <div class="task-name">${escapeHtml(task.task_name)}</div>
+              <div class="task-meta">
+                <span class="task-badge badge-category">📁 ${escapeHtml(task.category)}</span>
+                <span class="task-badge badge-time">⏱ ${timeText}</span>
+                <span class="task-badge badge-start">🕐 開始: ${startTime}</span>
+                <span class="task-badge badge-end">🕑 終了: ${endTime}</span>
+              </div>
+              ${task.memo ? `<div style="color:#666;font-size:14px;margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0;">📝 ${escapeHtml(task.memo)}</div>` : ""}
+            </div>
+            <div class="task-actions">
+              <button class="btn btn-warning btn-small" onclick="openEditModal('${task.id}')">✏️ 編集</button>
+              <button class="btn btn-danger btn-small" onclick="deleteTask('${task.id}')">🗑 削除</button>
+            </div>
+          </div>`;
+      }).join("");
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text ?? "";
+      return div.innerHTML;
+    }
+
+    window.switchTab = function(tab) {
+      document.querySelectorAll(".nav-tab").forEach((t) => t.classList.remove("active"));
+      document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+
+      if (tab === "task") {
+        document.querySelector(".nav-tab:first-child").classList.add("active");
+        document.getElementById("task-tab").classList.add("active");
+      } else {
+        document.querySelector(".nav-tab:last-child").classList.add("active");
+        document.getElementById("report-tab").classList.add("active");
+      }
+    };
+
+    window.startTimer = async function() {
+      if (isRunning) return;
+
+      const taskName = document.getElementById("task-name").value;
+      const category = document.getElementById("category").value;
+      const memo = document.getElementById("memo").value;
+
+      if (!taskName || !category) {
+        alert("タスク名とカテゴリを入力してから開始してください");
+        return;
+      }
+
+      try {
+        const dateStr = selectedDate.toISOString().split("T")[0];
+        const response = await authedFetch("/api/task/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_name: taskName, category, memo, created_date: dateStr })
+        });
+
+        if (!response.ok) throw new Error("タスク登録に失敗しました");
+
+        const data = await response.json();
+        currentTaskId = data.task.id;
+
+        const startResponse = await authedFetch("/api/task/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_id: currentTaskId })
+        });
+
+        if (!startResponse.ok) throw new Error("タイマー開始に失敗しました");
 
         isRunning = true;
         isStopped = false;
-
-        document.getElementById("timer").classList.remove("stopped");
         document.getElementById("start-btn").disabled = true;
-        document.getElementById("resume-btn").disabled = true;
-        document.getElementById("resume-btn").style.display = "none";
         document.getElementById("stop-btn").disabled = false;
-        document.getElementById("stop-btn").style.display = "inline-block";
         document.getElementById("save-btn").disabled = true;
+        document.getElementById("timer").classList.remove("stopped");
 
         timerInterval = setInterval(() => {
           seconds++;
           updateTimerDisplay();
         }, 1000);
+      } catch (error) {
+        console.error("エラー:", error);
+        alert("開始に失敗: " + error.message);
+      }
+    };
+
+    window.stopTimer = async function() {
+      if (!isRunning || !currentTaskId) return;
+
+      isRunning = false;
+      isStopped = true;
+      clearInterval(timerInterval);
+
+      document.getElementById("timer").classList.add("stopped");
+      document.getElementById("start-btn").disabled = true;
+      document.getElementById("stop-btn").disabled = true;
+      document.getElementById("stop-btn").style.display = "none";
+      document.getElementById("resume-btn").disabled = false;
+      document.getElementById("resume-btn").style.display = "inline-block";
+      document.getElementById("save-btn").disabled = false;
+    };
+
+    window.resumeTimer = function() {
+      if (isRunning || !isStopped || !currentTaskId) return;
+
+      isRunning = true;
+      isStopped = false;
+
+      document.getElementById("timer").classList.remove("stopped");
+      document.getElementById("start-btn").disabled = true;
+      document.getElementById("resume-btn").disabled = true;
+      document.getElementById("resume-btn").style.display = "none";
+      document.getElementById("stop-btn").disabled = false;
+      document.getElementById("stop-btn").style.display = "inline-block";
+      document.getElementById("save-btn").disabled = true;
+
+      timerInterval = setInterval(() => {
+        seconds++;
+        updateTimerDisplay();
+      }, 1000);
+    };
+
+    function updateTimerDisplay() {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+      document.getElementById("timer").textContent = 
+        `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
+
+    window.saveTask = async function() {
+      if (!currentTaskId) {
+        alert("タスクを開始してから保存してください");
+        return;
       }
 
-      function updateTimerDisplay() {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = seconds % 60;
+      try {
+        const response = await authedFetch("/api/task/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_id: currentTaskId })
+        });
 
-        document.getElementById("timer").textContent = `${String(
-          hours
-        ).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(
-          secs
-        ).padStart(2, "0")}`;
+        if (!response.ok) throw new Error("保存に失敗しました");
+
+        await loadTasksForSelectedDate();
+
+        document.getElementById("task-name").value = "";
+        document.getElementById("category").value = "";
+        document.getElementById("memo").value = "";
+        seconds = 0;
+        updateTimerDisplay();
+
+        currentTaskId = null;
+        isStopped = false;
+        isRunning = false;
+
+        document.getElementById("start-btn").disabled = false;
+        document.getElementById("stop-btn").disabled = true;
+        document.getElementById("stop-btn").style.display = "inline-block";
+        document.getElementById("resume-btn").disabled = true;
+        document.getElementById("resume-btn").style.display = "none";
+        document.getElementById("save-btn").disabled = true;
+        document.getElementById("timer").classList.remove("stopped");
+
+        if (timerInterval) clearInterval(timerInterval);
+
+        alert("タスクを保存しました！");
+      } catch (error) {
+        console.error("エラー:", error);
+        alert("保存に失敗: " + error.message);
       }
+    };
 
-      async function saveTask() {
-        if (!currentTaskId) {
-          alert("タスクを開始してから保存してください");
+    window.openEditModal = async function(taskId) {
+      editingTaskId = taskId;
+
+      try {
+        const dateStr = selectedDate.toISOString().split("T")[0];
+        const response = await authedFetch(`/api/tasks/date?date=${dateStr}`);
+        if (!response.ok) throw new Error("タスク情報の取得に失敗しました");
+
+        const data = await response.json();
+        const task = (data.tasks || []).find((t) => t.id === taskId);
+
+        if (!task) {
+          alert("タスクが見つかりません");
           return;
         }
 
-        try {
-          const response = await fetch("/api/task/stop", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              task_id: currentTaskId,
-            }),
-          });
+        document.getElementById("edit-task-name").value = task.task_name;
+        document.getElementById("edit-category").value = task.category;
+        document.getElementById("edit-memo").value = task.memo || "";
 
-          if (!response.ok) {
-            throw new Error("タスクの保存に失敗しました");
-          }
+        document.getElementById("edit-modal").classList.add("active");
+      } catch (error) {
+        console.error("エラー:", error);
+        alert("取得に失敗: " + error.message);
+      }
+    };
 
-          await loadTasksForSelectedDate();
+    window.closeEditModal = function() {
+      document.getElementById("edit-modal").classList.remove("active");
+      editingTaskId = null;
+    };
 
-          document.getElementById("task-name").value = "";
-          document.getElementById("category").value = "";
-          document.getElementById("memo").value = "";
-          seconds = 0;
-          updateTimerDisplay();
-          currentTaskId = null;
-          isStopped = false;
-          isRunning = false;
+    window.saveEditTask = async function() {
+      if (!editingTaskId) return;
 
-          document.getElementById("start-btn").disabled = false;
-          document.getElementById("stop-btn").disabled = true;
-          document.getElementById("stop-btn").style.display = "inline-block";
-          document.getElementById("resume-btn").disabled = true;
-          document.getElementById("resume-btn").style.display = "none";
-          document.getElementById("save-btn").disabled = true;
-          document.getElementById("timer").classList.remove("stopped");
+      const taskName = document.getElementById("edit-task-name").value;
+      const category = document.getElementById("edit-category").value;
+      const memo = document.getElementById("edit-memo").value;
 
-          if (timerInterval) {
-            clearInterval(timerInterval);
-          }
-
-          alert("タスクを保存しました！");
-        } catch (error) {
-          console.error("エラー:", error);
-          alert("タスクの保存に失敗しました: " + error.message);
-        }
+      if (!taskName || !category) {
+        alert("タスク名とカテゴリは必須です");
+        return;
       }
 
-      async function openEditModal(taskId) {
-        editingTaskId = taskId;
+      try {
+        const response = await authedFetch(`/api/task/update/${editingTaskId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_name: taskName, category, memo })
+        });
 
-        try {
-          const dateStr = selectedDate.toISOString().split("T")[0];
-          const response = await fetch(`/api/tasks/date?date=${dateStr}`);
-          if (!response.ok) throw new Error("タスク情報の取得に失敗しました");
+        if (!response.ok) throw new Error("更新に失敗しました");
 
-          const data = await response.json();
-          const task = data.tasks.find((t) => t.id === taskId);
+        closeEditModal();
+        await loadTasksForSelectedDate();
+        alert("更新しました！");
+      } catch (error) {
+        console.error("エラー:", error);
+        alert("更新に失敗: " + error.message);
+      }
+    };
 
-          if (!task) {
-            alert("タスクが見つかりません");
-            return;
-          }
+    window.deleteTask = async function(taskId) {
+      if (!confirm("このタスクを削除しますか？")) return;
 
-          document.getElementById("edit-task-name").value = task.task_name;
-          document.getElementById("edit-category").value = task.category;
-          document.getElementById("edit-memo").value = task.memo || "";
+      try {
+        const response = await authedFetch(`/api/task/delete/${taskId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
 
-          document.getElementById("edit-modal").classList.add("active");
-        } catch (error) {
-          console.error("エラー:", error);
-          alert("タスク情報の取得に失敗しました: " + error.message);
-        }
+        if (!response.ok) throw new Error("削除に失敗しました");
+
+        await loadTasksForSelectedDate();
+        alert("削除しました");
+      } catch (error) {
+        console.error("エラー:", error);
+        alert("削除に失敗: " + error.message);
+      }
+    };
+
+    window.generateReport = async function() {
+      const year = document.getElementById("report-year").value;
+      const month = document.getElementById("report-month").value;
+      const groupBy = document.getElementById("group-by").value;
+
+      try {
+        const response = await authedFetch(`/api/report/monthly?year=${year}&month=${month}&group_by=${groupBy}`);
+        if (!response.ok) throw new Error("レポート取得に失敗しました");
+
+        const data = await response.json();
+
+        document.getElementById("total-days").textContent = `${data.totals?.total_days ?? 0}日`;
+        document.getElementById("total-hours").textContent = `${(data.totals?.total_hours ?? 0).toFixed(1)}h`;
+        document.getElementById("total-tasks").textContent = `${data.totals?.total_tasks ?? 0}件`;
+
+        displayReportTable(data.data || []);
+      } catch (error) {
+        console.error("レポート生成エラー:", error);
+        alert("レポート生成に失敗: " + error.message);
+      }
+    };
+
+    function displayReportTable(data) {
+      const tbody = document.getElementById("report-table-body");
+
+      if (!data || data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:40px;color:#999;">データがありません</td></tr>`;
+        return;
       }
 
-      function closeEditModal() {
-        document.getElementById("edit-modal").classList.remove("active");
-        editingTaskId = null;
+      const sumSeconds = data.reduce((sum, d) => sum + (d.total_seconds || 0), 0) || 1;
+
+      tbody.innerHTML = data.map((item) => {
+        const hours = (item.total_hours || 0).toFixed(1);
+        const percentage = (((item.total_seconds || 0) / sumSeconds) * 100).toFixed(1);
+
+        return `
+          <tr>
+            <td>${escapeHtml(item.name)}</td>
+            <td>${hours}時間</td>
+            <td>${percentage}%</td>
+            <td>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width:${percentage}%"></div>
+              </div>
+            </td>
+          </tr>`;
+      }).join("");
+    }
+
+    window.exportCSV = async function() {
+      const year = document.getElementById("report-year").value;
+      const month = document.getElementById("report-month").value;
+
+      try {
+        const response = await authedFetch(`/api/export/csv?year=${year}&month=${month}`);
+        if (!response.ok) throw new Error("CSV出力に失敗しました");
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `tasks_${year}_${String(month).padStart(2, "0")}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        alert("CSVファイルをダウンロードしました");
+      } catch (error) {
+        console.error("CSVエクスポートエラー:", error);
+        alert("CSV出力に失敗: " + error.message);
       }
+    };
 
-      async function saveEditTask() {
-        if (!editingTaskId) return;
-
-        const taskName = document.getElementById("edit-task-name").value;
-        const category = document.getElementById("edit-category").value;
-        const memo = document.getElementById("edit-memo").value;
-
-        if (!taskName || !category) {
-          alert("タスク名とカテゴリは必須です");
-          return;
-        }
-
-        try {
-          const response = await fetch(`/api/task/update/${editingTaskId}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              task_name: taskName,
-              category: category,
-              memo: memo,
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error("タスクの更新に失敗しました");
-          }
-
-          closeEditModal();
-          await loadTasksForSelectedDate();
-          alert("タスクを更新しました！");
-        } catch (error) {
-          console.error("エラー:", error);
-          alert("タスクの更新に失敗しました: " + error.message);
-        }
-      }
-
-      async function deleteTask(id) {
-        if (!confirm("このタスクを削除しますか？")) {
-          return;
-        }
-
-        try {
-          const response = await fetch(`/api/task/delete/${id}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error("タスクの削除に失敗しました");
-          }
-
-          loadTasksForSelectedDate();
-          alert("タスクを削除しました");
-        } catch (error) {
-          console.error("エラー:", error);
-          alert("タスクの削除に失敗しました: " + error.message);
-        }
-      }
-
-      async function generateReport() {
-        const year = document.getElementById("report-year").value;
-        const month = document.getElementById("report-month").value;
-        const groupBy = document.getElementById("group-by").value;
-
-        try {
-          const response = await fetch(
-            `/api/report/monthly?year=${year}&month=${month}&group_by=${groupBy}`
-          );
-
-          if (!response.ok) {
-            throw new Error("レポートの取得に失敗しました");
-          }
-
-          const data = await response.json();
-
-          const totalDays = data.totals?.total_days || 0;
-          const totalHours = data.totals?.total_hours || 0;
-          const totalTasks = data.totals?.total_tasks || 0;
-
-          document.getElementById("total-days").textContent = `${totalDays}日`;
-          document.getElementById("total-hours").textContent = `${totalHours}h`;
-          document.getElementById(
-            "total-tasks"
-          ).textContent = `${totalTasks}件`;
-
-          displayReportTable(data.data || []);
-        } catch (error) {
-          console.error("レポート生成エラー:", error);
-          alert("レポートの生成に失敗しました: " + error.message);
-        }
-      }
-
-      function displayReportTable(data) {
-        const tbody = document.getElementById("report-table-body");
-
-        if (!data || data.length === 0) {
-          tbody.innerHTML = `
-                    <tr>
-                        <td colspan="4" style="text-align: center; padding: 40px; color: #999;">
-                            データがありません
-                        </td>
-                    </tr>
-                `;
-          return;
-        }
-
-        tbody.innerHTML = data
-          .map((item) => {
-            const hours = item.total_hours || 0;
-            const percentage = (
-              ((item.total_seconds || 0) /
-                data.reduce((sum, d) => sum + (d.total_seconds || 0), 0)) *
-              100
-            ).toFixed(1);
-
-            return `
-                    <tr>
-                        <td>${escapeHtml(item.name)}</td>
-                        <td>${hours}時間</td>
-                        <td>${percentage}%</td>
-                        <td>
-                            <div class="progress-bar">
-                                <div class="progress-fill" style="width: ${percentage}%"></div>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-          })
-          .join("");
-      }
-
-      async function exportCSV() {
-        const year = document.getElementById("report-year").value;
-        const month = document.getElementById("report-month").value;
-
-        try {
-          const response = await fetch(
-            `/api/export/csv?year=${year}&month=${month}`
-          );
-
-          if (!response.ok) {
-            throw new Error("CSVエクスポートに失敗しました");
-          }
-
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `tasks_${year}_${month.padStart(2, "0")}.csv`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          window.URL.revokeObjectURL(url);
-
-          alert("CSVファイルをダウンロードしました");
-        } catch (error) {
-          console.error("CSVエクスポートエラー:", error);
-          alert("CSVエクスポートに失敗しました: " + error.message);
-        }
-      }
-
-      window.onclick = function (event) {
-        const modal = document.getElementById("edit-modal");
-        if (event.target === modal) {
-          closeEditModal();
-        }
-      };
-    </script>
-  </body>
+    window.onclick = function(event) {
+      const modal = document.getElementById("edit-modal");
+      if (event.target === modal) closeEditModal();
+    };
+  </script>
+</body>
 </html>

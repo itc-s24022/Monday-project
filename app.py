@@ -1,474 +1,411 @@
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from datetime import datetime
-import os
-from dotenv import load_dotenv
-import csv
-import io
+from flask import Flask, render_template, request, jsonify, send_file
+from datetime import datetime, date
 from calendar import monthrange
+import os
+import io
+import csv
+from functools import wraps
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+import firebase_admin
+from firebase_admin import credentials, auth, firestore
 
 load_dotenv()
 
 app = Flask(__name__)
 
-# Database configuration
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'database': os.getenv('DB_NAME', 'todo_db'),
-    'user': os.getenv('DB_USER', 'todo_user'),
-    'password': os.getenv('DB_PASSWORD', 'todo_password'),
-    'port': os.getenv('DB_PORT', '5432')
-}
+# ==================== Firebase Admin / Firestore 初期化 ====================
 
-def get_db_connection():
-    """データベース接続を取得"""
-    return psycopg2.connect(**DB_CONFIG)
+APP_DIR = Path(__file__).resolve().parent
+
+# .env の GOOGLE_APPLICATION_CREDENTIALS=./serviceAccountKey.json を想定
+cred_env = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "./serviceAccountKey.json")
+cred_path = (APP_DIR / cred_env).resolve() if cred_env.startswith("./") else Path(cred_env).expanduser().resolve()
+
+if not cred_path.exists():
+    raise FileNotFoundError(
+        f"[Firebase] service account key not found: {cred_path}\n"
+        f"Fix: Put serviceAccountKey.json next to app.py OR set GOOGLE_APPLICATION_CREDENTIALS in .env"
+    )
+
+if not firebase_admin._apps:
+    firebase_admin.initialize_app(credentials.Certificate(str(cred_path)))
+
+fs = firestore.client()
+
+# ==================== Auth Decorator ====================
+
+def require_firebase_auth(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"error": "Missing Bearer token"}), 401
+
+        id_token = auth_header.split("Bearer ")[1].strip()
+        try:
+            decoded = auth.verify_id_token(id_token)
+        except Exception:
+            return jsonify({"error": "Invalid token"}), 401
+
+        request.firebase_uid = decoded["uid"]
+        return fn(*args, **kwargs)
+    return wrapper
+
+def tasks_ref(uid: str):
+    # users/{uid}/tasks/{docId}
+    return fs.collection("users").document(uid).collection("tasks")
+
+def _to_iso(value):
+    if value is None:
+        return None
+    # Firestore Timestamp -> datetime
+    if hasattr(value, "to_datetime"):
+        value = value.to_datetime()
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+def _doc_to_task(doc):
+    d = doc.to_dict() or {}
+    return {
+        "id": doc.id,  # Firestore docId（文字列）
+        "task_name": d.get("task_name"),
+        "category": d.get("category"),
+        "memo": d.get("memo", ""),
+        "created_date": d.get("created_date"),          # "YYYY-MM-DD"
+        "created_at": _to_iso(d.get("created_at")),     # ISO
+        "start_time": _to_iso(d.get("start_time")),     # ISO
+        "end_time": _to_iso(d.get("end_time")),         # ISO
+        "duration_seconds": int(d.get("duration_seconds") or 0),
+    }
 
 # ==================== 画面表示 ====================
 
-@app.route('/')
+@app.route("/")
 def index():
-    """タスク登録画面（当日のタスク一覧含む）"""
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT * FROM tasks 
-            WHERE created_date = CURRENT_DATE 
-            ORDER BY created_at DESC
-        """)
-        tasks = cur.fetchall()
-        cur.close()
-        conn.close()
-        
-        db_info = {
-            'type': 'PostgreSQL',
-            'database': DB_CONFIG['database'],
-            'user': DB_CONFIG['user'],
-            'host': f"{DB_CONFIG['host']}:{DB_CONFIG['port']}"
+    return render_template("index.html")
+
+# ==================== API ====================
+
+@app.route("/api/task/add", methods=["POST"])
+@require_firebase_auth
+def api_add_task():
+    uid = request.firebase_uid
+    data = request.get_json() or {}
+
+    task_name = data.get("task_name")
+    category = data.get("category")
+    memo = data.get("memo", "")
+    created_date = data.get("created_date")  # optional "YYYY-MM-DD"
+
+    if not task_name or not category:
+        return jsonify({"error": "task_nameとcategoryは必須です"}), 400
+
+    if created_date:
+        try:
+            datetime.strptime(created_date, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "created_date形式が不正です (YYYY-MM-DD)"}), 400
+    else:
+        created_date = date.today().isoformat()
+
+    doc_ref = tasks_ref(uid).document()  # 自動docId
+    payload = {
+        "task_name": task_name,
+        "category": category,
+        "memo": memo,
+        "created_date": created_date,
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "start_time": None,
+        "end_time": None,
+        "duration_seconds": 0,
+    }
+    doc_ref.set(payload)
+
+    return jsonify({
+        "success": True,
+        "task": {
+            "id": doc_ref.id,
+            "task_name": task_name,
+            "category": category,
+            "memo": memo,
+            "created_date": created_date,
+            "created_at": None,
+            "start_time": None,
+            "end_time": None,
+            "duration_seconds": 0,
         }
-        
-        return render_template('index.html', tasks=tasks, db_info=db_info)
-    except Exception as e:
-        return render_template('index.html', tasks=[], error=str(e))
+    }), 201
 
-@app.route('/report')
-def report():
-    """月次レポート画面"""
-    return render_template('report.html')
+@app.route("/api/tasks/date")
+@require_firebase_auth
+def api_tasks_by_date():
+    uid = request.firebase_uid
+    date_str = request.args.get("date")
 
-# ==================== HTMLフォーム用の互換ルート ====================
-
-@app.route('/add', methods=['POST'])
-def add_task_form():
-    """HTMLフォームからのタスク登録（互換性用）"""
-    task_name = request.form.get('title')
-    category = request.form.get('category', 'その他')  # デフォルトカテゴリ
-    
-    if not task_name:
-        return render_template('index.html', tasks=[], error='タスク名を入力してください')
-    
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            INSERT INTO tasks (task_name, category, memo)
-            VALUES (%s, %s, %s)
-            RETURNING *
-        """, (task_name, category, ''))
-        conn.commit()
-        cur.close()
-        conn.close()
-        
-        # リダイレクトで画面を再読み込み
-        return redirect(url_for('index'))
-    except Exception as e:
-        return render_template('index.html', tasks=[], error=str(e))
-
-@app.route('/delete/<int:task_id>', methods=['POST'])
-def delete_task_form(task_id):
-    """HTMLフォームからのタスク削除（互換性用）"""
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM tasks WHERE id = %s RETURNING id", (task_id,))
-        deleted = cur.fetchone()
-        
-        if not deleted:
-            cur.close()
-            conn.close()
-            return redirect(url_for('index'))
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        return redirect(url_for('index'))
-    except Exception as e:
-        return redirect(url_for('index'))
-
-# ==================== API エンドポイント ====================
-
-@app.route('/api/task/add', methods=['POST'])
-def add_task():
-    """新規タスク登録"""
-    data = request.get_json()
-    task_name = data.get('task_name')
-    category = data.get('category')
-    memo = data.get('memo', '')
-    firebase_uid = data.get('firebase_uid')
-    created_date = data.get('created_date')  # 日付指定を受け付ける
-    
-    if not task_name or not category:
-        return jsonify({'error': 'task_nameとcategoryは必須です'}), 400
-    
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # created_dateが指定されている場合はそれを使用、なければCURRENT_DATE
-        if created_date:
-            cur.execute("""
-                INSERT INTO tasks (task_name, category, memo, firebase_uid, created_date)
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING *
-            """, (task_name, category, memo, firebase_uid, created_date))
-        else:
-            cur.execute("""
-                INSERT INTO tasks (task_name, category, memo, firebase_uid)
-                VALUES (%s, %s, %s, %s)
-                RETURNING *
-            """, (task_name, category, memo, firebase_uid))
-        
-        new_task = cur.fetchone()
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({'success': True, 'task': dict(new_task)}), 201
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/tasks/today')
-def get_today_tasks():
-    """今日のタスク一覧を取得"""
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT * FROM tasks 
-            WHERE created_date = CURRENT_DATE 
-            ORDER BY created_at DESC
-        """)
-        tasks = cur.fetchall()
-        cur.close()
-        conn.close()
-        return jsonify({'success': True, 'tasks': [dict(t) for t in tasks]}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/tasks/date')
-def get_tasks_by_date():
-    """指定日付のタスク一覧を取得"""
-    date_str = request.args.get('date')
-    
     if not date_str:
-        return jsonify({'error': 'dateパラメータは必須です'}), 400
-    
+        return jsonify({"error": "dateパラメータは必須です"}), 400
     try:
-        # 日付の妥当性チェック
-        datetime.strptime(date_str, '%Y-%m-%d')
-        
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            SELECT * FROM tasks 
-            WHERE created_date = %s 
-            ORDER BY created_at DESC
-        """, (date_str,))
-        tasks = cur.fetchall()
-        cur.close()
-        conn.close()
-        return jsonify({'success': True, 'tasks': [dict(t) for t in tasks]}), 200
+        datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
-        return jsonify({'error': '日付の形式が正しくありません (YYYY-MM-DD)'}), 400
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": "日付形式が不正です (YYYY-MM-DD)"}), 400
 
-@app.route('/api/task/start', methods=['POST'])
-def start_task():
-    """タイマー開始"""
-    data = request.get_json()
-    task_id = data.get('task_id')
+    # インデックス不要にするため order_by を削除
+    q = tasks_ref(uid).where("created_date", "==", date_str)
+
+    docs = list(q.stream())
+    tasks = [_doc_to_task(d) for d in docs]
+    # Python側でソート（created_atの降順）
+    tasks.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     
+    return jsonify({"success": True, "tasks": tasks}), 200
+
+@app.route("/api/tasks/today")
+@require_firebase_auth
+def api_tasks_today():
+    uid = request.firebase_uid
+    today = date.today().isoformat()
+    
+    # インデックス不要にするため order_by を削除
+    q = tasks_ref(uid).where("created_date", "==", today)
+    
+    docs = list(q.stream())
+    tasks = [_doc_to_task(d) for d in docs]
+    # Python側でソート（created_atの降順）
+    tasks.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    
+    return jsonify({"success": True, "tasks": tasks}), 200
+
+@app.route("/api/task/start", methods=["POST"])
+@require_firebase_auth
+def api_task_start():
+    uid = request.firebase_uid
+    data = request.get_json() or {}
+    task_id = data.get("task_id")  # Firestore docId（文字列）
+
     if not task_id:
-        return jsonify({'error': 'task_idは必須です'}), 400
-    
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT start_time FROM tasks WHERE id = %s", (task_id,))
-        task = cur.fetchone()
-        
-        if not task:
-            cur.close()
-            conn.close()
-            return jsonify({'error': 'タスクが見つかりません'}), 404
-        
-        if task['start_time']:
-            cur.close()
-            conn.close()
-            return jsonify({'error': 'タスクは既に開始されています'}), 400
-        
-        cur.execute("""
-            UPDATE tasks SET start_time = CURRENT_TIMESTAMP
-            WHERE id = %s RETURNING id, task_name, start_time
-        """, (task_id,))
-        updated_task = cur.fetchone()
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({'success': True, 'task': dict(updated_task)}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": "task_idは必須です"}), 400
 
-@app.route('/api/task/stop', methods=['POST'])
-def stop_task():
-    """タイマー停止"""
-    data = request.get_json()
-    task_id = data.get('task_id')
-    
+    doc_ref = tasks_ref(uid).document(task_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return jsonify({"error": "タスクが見つかりません"}), 404
+
+    d = doc.to_dict() or {}
+    if d.get("start_time") is not None:
+        return jsonify({"error": "タスクは既に開始されています"}), 400
+
+    doc_ref.update({"start_time": firestore.SERVER_TIMESTAMP})
+    doc2 = doc_ref.get()
+    return jsonify({"success": True, "task": _doc_to_task(doc2)}), 200
+
+@app.route("/api/task/stop", methods=["POST"])
+@require_firebase_auth
+def api_task_stop():
+    uid = request.firebase_uid
+    data = request.get_json() or {}
+    task_id = data.get("task_id")
+
     if not task_id:
-        return jsonify({'error': 'task_idは必須です'}), 400
-    
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT start_time, end_time FROM tasks WHERE id = %s", (task_id,))
-        task = cur.fetchone()
-        
-        if not task:
-            cur.close()
-            conn.close()
-            return jsonify({'error': 'タスクが見つかりません'}), 404
-        
-        if not task['start_time']:
-            cur.close()
-            conn.close()
-            return jsonify({'error': 'タスクが開始されていません'}), 400
-        
-        if task['end_time']:
-            cur.close()
-            conn.close()
-            return jsonify({'error': 'タスクは既に停止されています'}), 400
-        
-        cur.execute("""
-            UPDATE tasks
-            SET end_time = CURRENT_TIMESTAMP,
-                duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - start_time))::INTEGER
-            WHERE id = %s RETURNING *
-        """, (task_id,))
-        updated_task = cur.fetchone()
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({'success': True, 'task': dict(updated_task)}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": "task_idは必須です"}), 400
 
-@app.route('/api/task/update/<int:task_id>', methods=['POST'])
-def update_task(task_id):
-    """タスク編集"""
-    data = request.get_json()
-    task_name = data.get('task_name')
-    category = data.get('category')
-    memo = data.get('memo', '')
-    
+    doc_ref = tasks_ref(uid).document(task_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return jsonify({"error": "タスクが見つかりません"}), 404
+
+    d = doc.to_dict() or {}
+    start_time = d.get("start_time")
+    end_time = d.get("end_time")
+
+    if start_time is None:
+        return jsonify({"error": "タスクが開始されていません"}), 400
+    if end_time is not None:
+        return jsonify({"error": "タスクは既に停止されています"}), 400
+
+    # Timestamp -> datetime
+    start_dt = start_time.to_datetime() if hasattr(start_time, "to_datetime") else start_time
+    now_dt = datetime.utcnow()
+    duration_seconds = int((now_dt - start_dt.replace(tzinfo=None)).total_seconds())
+    if duration_seconds < 0:
+        duration_seconds = 0
+
+    doc_ref.update({
+        "end_time": firestore.SERVER_TIMESTAMP,
+        "duration_seconds": duration_seconds,
+    })
+    doc2 = doc_ref.get()
+    return jsonify({"success": True, "task": _doc_to_task(doc2)}), 200
+
+@app.route("/api/task/update/<task_id>", methods=["POST"])
+@require_firebase_auth
+def api_task_update(task_id):
+    uid = request.firebase_uid
+    data = request.get_json() or {}
+
+    task_name = data.get("task_name")
+    category = data.get("category")
+    memo = data.get("memo", "")
+
     if not task_name or not category:
-        return jsonify({'error': 'task_nameとcategoryは必須です'}), 400
-    
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # タスクの存在確認
-        cur.execute("SELECT id FROM tasks WHERE id = %s", (task_id,))
-        if not cur.fetchone():
-            cur.close()
-            conn.close()
-            return jsonify({'error': 'タスクが見つかりません'}), 404
-        
-        # タスクを更新
-        cur.execute("""
-            UPDATE tasks 
-            SET task_name = %s, category = %s, memo = %s
-            WHERE id = %s
-            RETURNING *
-        """, (task_name, category, memo, task_id))
-        updated_task = cur.fetchone()
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({'success': True, 'task': dict(updated_task)}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": "task_nameとcategoryは必須です"}), 400
 
-@app.route('/api/task/delete/<int:task_id>', methods=['POST'])
-def delete_task(task_id):
-    """タスク削除"""
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM tasks WHERE id = %s RETURNING id", (task_id,))
-        deleted = cur.fetchone()
-        
-        if not deleted:
-            cur.close()
-            conn.close()
-            return jsonify({'error': 'タスクが見つかりません'}), 404
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({'success': True, 'message': 'タスクを削除しました'}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    doc_ref = tasks_ref(uid).document(task_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return jsonify({"error": "タスクが見つかりません"}), 404
 
-@app.route('/api/report/monthly', methods=['GET'])
-def get_monthly_report():
-    """月次集計データ取得"""
-    year = request.args.get('year', type=int) or datetime.now().year
-    month = request.args.get('month', type=int) or datetime.now().month
-    group_by = request.args.get('group_by', 'category')
-    firebase_uid = request.args.get('firebase_uid')
-    
+    doc_ref.update({
+        "task_name": task_name,
+        "category": category,
+        "memo": memo,
+    })
+    doc2 = doc_ref.get()
+    return jsonify({"success": True, "task": _doc_to_task(doc2)}), 200
+
+@app.route("/api/task/delete/<task_id>", methods=["POST"])
+@require_firebase_auth
+def api_task_delete(task_id):
+    uid = request.firebase_uid
+    doc_ref = tasks_ref(uid).document(task_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return jsonify({"error": "タスクが見つかりません"}), 404
+
+    doc_ref.delete()
+    return jsonify({"success": True, "message": "タスクを削除しました"}), 200
+
+@app.route("/api/report/monthly", methods=["GET"])
+@require_firebase_auth
+def api_report_monthly():
+    uid = request.firebase_uid
+
+    year = request.args.get("year", type=int) or datetime.now().year
+    month = request.args.get("month", type=int) or datetime.now().month
+    group_by = request.args.get("group_by", "category")  # category / project
+
     if not (1 <= month <= 12):
-        return jsonify({'error': '月は1-12の範囲で指定してください'}), 400
-    
-    try:
-        start_date = f"{year}-{month:02d}-01"
-        _, last_day = monthrange(year, month)
-        end_date = f"{year}-{month:02d}-{last_day}"
-        
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        group_column = 'category' if group_by == 'category' else 'task_name'
-        query = f"""
-            SELECT {group_column} as name,
-                   COUNT(*) as task_count,
-                   SUM(duration_seconds) as total_seconds,
-                   ROUND(SUM(duration_seconds) / 3600.0, 2) as total_hours
-            FROM tasks
-            WHERE created_date >= %s AND created_date <= %s
-        """
-        params = [start_date, end_date]
-        
-        if firebase_uid:
-            query += " AND firebase_uid = %s"
-            params.append(firebase_uid)
-        
-        query += f" GROUP BY {group_column} ORDER BY total_seconds DESC"
-        cur.execute(query, params)
-        grouped_data = cur.fetchall()
-        
-        # 合計
-        total_query = """
-            SELECT COUNT(*) as total_tasks,
-                   SUM(duration_seconds) as total_seconds,
-                   ROUND(SUM(duration_seconds) / 3600.0, 2) as total_hours
-            FROM tasks WHERE created_date >= %s AND created_date <= %s
-        """
-        total_params = [start_date, end_date]
-        if firebase_uid:
-            total_query += " AND firebase_uid = %s"
-            total_params.append(firebase_uid)
-        
-        cur.execute(total_query, total_params)
-        totals = cur.fetchone()
-        cur.close()
-        conn.close()
-        
-        return jsonify({
-            'success': True,
-            'year': year,
-            'month': month,
-            'group_by': group_by,
-            'data': [dict(row) for row in grouped_data],
-            'totals': dict(totals) if totals else {'total_tasks': 0, 'total_seconds': 0, 'total_hours': 0}
-        }), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": "月は1-12の範囲で指定してください"}), 400
 
-@app.route('/api/export/csv', methods=['GET'])
-def export_csv():
-    """CSV形式でエクスポート"""
-    year = request.args.get('year', type=int) or datetime.now().year
-    month = request.args.get('month', type=int) or datetime.now().month
-    firebase_uid = request.args.get('firebase_uid')
-    
-    try:
-        start_date = f"{year}-{month:02d}-01"
-        _, last_day = monthrange(year, month)
-        end_date = f"{year}-{month:02d}-{last_day}"
-        
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        query = """
-            SELECT * FROM tasks
-            WHERE created_date >= %s AND created_date <= %s
-        """
-        params = [start_date, end_date]
-        if firebase_uid:
-            query += " AND firebase_uid = %s"
-            params.append(firebase_uid)
-        query += " ORDER BY created_date, created_at"
-        
-        cur.execute(query, params)
-        tasks = cur.fetchall()
-        cur.close()
-        conn.close()
-        
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(['ID', 'タスク名', 'カテゴリ', 'メモ', '開始時刻', '終了時刻', '作業時間(秒)', '作業時間(時間)', '作成日', '作成日時'])
-        
-        for task in tasks:
-            hours = round(task['duration_seconds'] / 3600, 2) if task['duration_seconds'] else 0
-            writer.writerow([
-                task['id'], task['task_name'], task['category'], task['memo'] or '',
-                task['start_time'].strftime('%Y-%m-%d %H:%M:%S') if task['start_time'] else '',
-                task['end_time'].strftime('%Y-%m-%d %H:%M:%S') if task['end_time'] else '',
-                task['duration_seconds'], hours,
-                task['created_date'].strftime('%Y-%m-%d'),
-                task['created_at'].strftime('%Y-%m-%d %H:%M:%S')
-            ])
-        
-        output.seek(0)
-        return send_file(
-            io.BytesIO(output.getvalue().encode('utf-8-sig')),
-            mimetype='text/csv',
-            as_attachment=True,
-            download_name=f'tasks_{year}_{month:02d}.csv'
-        )
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    group_field = "category" if group_by == "category" else "task_name"
 
-@app.route('/health')
+    start_date = f"{year}-{month:02d}-01"
+    _, last_day = monthrange(year, month)
+    end_date = f"{year}-{month:02d}-{last_day}"
+
+    q = (tasks_ref(uid)
+         .where("created_date", ">=", start_date)
+         .where("created_date", "<=", end_date))
+
+    docs = list(q.stream())
+    rows = [d.to_dict() or {} for d in docs]
+
+    grouped = {}
+    total_seconds = 0
+    total_tasks = 0
+    unique_days = set()
+
+    for r in rows:
+        total_tasks += 1
+        unique_days.add(r.get("created_date"))
+        sec = int(r.get("duration_seconds") or 0)
+        total_seconds += sec
+
+        key = r.get(group_field) or "(未設定)"
+        if key not in grouped:
+            grouped[key] = {"name": key, "task_count": 0, "total_seconds": 0}
+        grouped[key]["task_count"] += 1
+        grouped[key]["total_seconds"] += sec
+
+    data = []
+    for v in grouped.values():
+        v["total_hours"] = round(v["total_seconds"] / 3600.0, 1)  # 小数第1位に変更
+        data.append(v)
+    data.sort(key=lambda x: x["total_seconds"], reverse=True)
+
+    totals = {
+        "total_days": len(unique_days),
+        "total_tasks": total_tasks,
+        "total_seconds": total_seconds,
+        "total_hours": round(total_seconds / 3600.0, 1),  # 小数第1位に変更
+    }
+
+    return jsonify({
+        "success": True,
+        "year": year,
+        "month": month,
+        "group_by": group_by,
+        "data": data,
+        "totals": totals,
+    }), 200
+
+@app.route("/api/export/csv", methods=["GET"])
+@require_firebase_auth
+def api_export_csv():
+    uid = request.firebase_uid
+
+    year = request.args.get("year", type=int) or datetime.now().year
+    month = request.args.get("month", type=int) or datetime.now().month
+
+    start_date = f"{year}-{month:02d}-01"
+    _, last_day = monthrange(year, month)
+    end_date = f"{year}-{month:02d}-{last_day}"
+
+    # インデックス不要にするため order_by を削除
+    q = (tasks_ref(uid)
+         .where("created_date", ">=", start_date)
+         .where("created_date", "<=", end_date))
+
+    docs = list(q.stream())
+    tasks = [_doc_to_task(d) for d in docs]
+    # Python側でソート（created_dateの昇順）
+    tasks.sort(key=lambda x: x.get("created_date") or "")
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "ID(docId)", "タスク名", "カテゴリ", "メモ",
+        "開始時刻", "終了時刻", "作業時間(秒)", "作業時間(時間)",
+        "作成日", "作成日時"
+    ])
+
+    for t in tasks:
+        hours = round((t.get("duration_seconds") or 0) / 3600.0, 2)
+        writer.writerow([
+            t["id"],
+            t.get("task_name"),
+            t.get("category"),
+            t.get("memo") or "",
+            t.get("start_time") or "",
+            t.get("end_time") or "",
+            t.get("duration_seconds") or 0,
+            hours,
+            t.get("created_date") or "",
+            t.get("created_at") or "",
+        ])
+
+    output.seek(0)
+    return send_file(
+        io.BytesIO(output.getvalue().encode("utf-8-sig")),
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name=f"tasks_{year}_{month:02d}.csv",
+    )
+
+@app.route("/health")
 def health_check():
-    """ヘルスチェック"""
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute('SELECT 1')
-        cur.close()
-        conn.close()
-        return jsonify({'status': 'healthy', 'database': 'connected'}), 200
+        fs.collection("_health").document("ping").set({"at": firestore.SERVER_TIMESTAMP}, merge=True)
+        return jsonify({"status": "healthy", "firestore": "connected"}), 200
     except Exception as e:
-        return jsonify({'status': 'unhealthy', 'database': 'disconnected', 'error': str(e)}), 500
+        return jsonify({"status": "unhealthy", "firestore": "disconnected", "error": str(e)}), 500
 
 @app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'エンドポイントが見つかりません'}), 404
+def not_found(_):
+    return jsonify({"error": "エンドポイントが見つかりません"}), 404
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
