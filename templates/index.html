@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
@@ -27,18 +27,46 @@
 
       <!-- タスク登録画面 -->
       <div id="task-tab" class="tab-content active">
-        <h2 style="margin-bottom: 20px">本日のタスク</h2>
+        <h2 style="margin-bottom: 20px">タスク管理</h2>
 
         <div class="task-form">
           <!-- カレンダー表示 -->
           <div class="calendar-section">
-            <div class="current-date">
-              <span class="date-icon">📅</span>
-              <span id="current-date" class="date-text"></span>
+            <div class="calendar-header">
+              <button class="calendar-nav-btn" onclick="changeMonth(-1)">
+                ◀
+              </button>
+              <div class="calendar-title">
+                <span id="calendar-month-year"></span>
+              </div>
+              <button class="calendar-nav-btn" onclick="changeMonth(1)">
+                ▶
+              </button>
+              <button class="calendar-today-btn" onclick="goToToday()">
+                今日
+              </button>
             </div>
-            <div class="today-stats">
-              <span>本日の作業時間: </span>
-              <span id="today-total-hours" class="stats-value">0.0h</span>
+            <div class="calendar-weekdays">
+              <div>日</div>
+              <div>月</div>
+              <div>火</div>
+              <div>水</div>
+              <div>木</div>
+              <div>金</div>
+              <div>土</div>
+            </div>
+            <div class="calendar-grid" id="calendar-grid">
+              <!-- カレンダーはJavaScriptで動的に生成 -->
+            </div>
+            <div class="current-date-info">
+              <div class="current-date">
+                <span class="date-icon">📅</span>
+                <span id="current-date" class="date-text"></span>
+              </div>
+              <div class="today-stats">
+                <span>選択日の作業時間: </span>
+                <span id="today-total-hours" class="stats-value">0.0h</span>
+              </div>
             </div>
           </div>
 
@@ -114,7 +142,7 @@
         </div>
 
         <div class="tasks-list">
-          <h3 style="margin-bottom: 15px">今日の作業履歴</h3>
+          <h3 style="margin-bottom: 15px">選択日の作業履歴</h3>
           <div id="tasks-container">
             <!-- タスクはJavaScriptで動的に表示 -->
           </div>
@@ -271,24 +299,143 @@
       let currentTaskId = null;
       let editingTaskId = null;
 
+      // カレンダー関連の変数
+      let currentCalendarDate = new Date();
+      let selectedDate = new Date();
+
       // ページ読み込み時の処理
       document.addEventListener("DOMContentLoaded", function () {
+        selectedDate = new Date(); // 今日の日付を選択状態に
+        renderCalendar();
         updateCurrentDate();
-        loadTodayTasks();
+        loadTasksForSelectedDate();
         const now = new Date();
         document.getElementById("report-year").value = now.getFullYear();
         document.getElementById("report-month").value = now.getMonth() + 1;
       });
 
+      // カレンダー描画関数
+      function renderCalendar() {
+        const year = currentCalendarDate.getFullYear();
+        const month = currentCalendarDate.getMonth();
+
+        // 月・年の表示
+        const monthNames = [
+          "1月",
+          "2月",
+          "3月",
+          "4月",
+          "5月",
+          "6月",
+          "7月",
+          "8月",
+          "9月",
+          "10月",
+          "11月",
+          "12月",
+        ];
+        document.getElementById(
+          "calendar-month-year"
+        ).textContent = `${year}年 ${monthNames[month]}`;
+
+        // 月の最初の日と最後の日を取得
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const firstDayOfWeek = firstDay.getDay(); // 0 = 日曜日
+        const daysInMonth = lastDay.getDate();
+
+        // カレンダーグリッドをクリア
+        const calendarGrid = document.getElementById("calendar-grid");
+        calendarGrid.innerHTML = "";
+
+        // 前月の日付で埋める
+        const prevMonthLastDay = new Date(year, month, 0).getDate();
+        for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+          const dayDiv = document.createElement("div");
+          dayDiv.className = "calendar-day other-month";
+          dayDiv.textContent = prevMonthLastDay - i;
+          calendarGrid.appendChild(dayDiv);
+        }
+
+        // 今日の日付
+        const today = new Date();
+        const isCurrentMonth =
+          today.getFullYear() === year && today.getMonth() === month;
+
+        // 当月の日付
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dayDiv = document.createElement("div");
+          dayDiv.className = "calendar-day";
+          dayDiv.textContent = day;
+
+          const currentDate = new Date(year, month, day);
+
+          // 今日の日付にマーク
+          if (isCurrentMonth && today.getDate() === day) {
+            dayDiv.classList.add("today");
+          }
+
+          // 選択中の日付にマーク
+          if (
+            selectedDate.getFullYear() === year &&
+            selectedDate.getMonth() === month &&
+            selectedDate.getDate() === day
+          ) {
+            dayDiv.classList.add("selected");
+          }
+
+          // 未来の日付を無効化
+          if (currentDate > today) {
+            dayDiv.classList.add("future");
+          } else {
+            dayDiv.onclick = () => selectDate(year, month, day);
+          }
+
+          calendarGrid.appendChild(dayDiv);
+        }
+
+        // 次月の日付で埋める
+        const remainingCells = 42 - (firstDayOfWeek + daysInMonth); // 6週間分
+        for (let day = 1; day <= remainingCells; day++) {
+          const dayDiv = document.createElement("div");
+          dayDiv.className = "calendar-day other-month";
+          dayDiv.textContent = day;
+          calendarGrid.appendChild(dayDiv);
+        }
+      }
+
+      // 日付選択
+      function selectDate(year, month, day) {
+        selectedDate = new Date(year, month, day);
+        renderCalendar();
+        updateCurrentDate();
+        loadTasksForSelectedDate();
+      }
+
+      // 月を変更
+      function changeMonth(delta) {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+        renderCalendar();
+      }
+
+      // 今日に戻る
+      function goToToday() {
+        const today = new Date();
+        currentCalendarDate = new Date(today);
+        selectedDate = new Date(today);
+        renderCalendar();
+        updateCurrentDate();
+        loadTasksForSelectedDate();
+      }
+
       function updateCurrentDate() {
-        const now = new Date();
         const options = {
           year: "numeric",
           month: "long",
           day: "numeric",
           weekday: "long",
         };
-        const dateStr = now.toLocaleDateString("ja-JP", options);
+        const dateStr = selectedDate.toLocaleDateString("ja-JP", options);
         document.getElementById("current-date").textContent = dateStr;
       }
 
@@ -303,19 +450,29 @@
         }, 0);
 
         const totalHours = (totalSeconds / 3600).toFixed(1);
-        document.getElementById("today-total-hours").textContent =
-          `${totalHours}h`;
+        document.getElementById(
+          "today-total-hours"
+        ).textContent = `${totalHours}h`;
       }
 
-      async function loadTodayTasks() {
+      async function loadTasksForSelectedDate() {
         const container = document.getElementById("tasks-container");
         container.innerHTML =
           '<p style="text-align: center; color: #666; padding: 20px;">読み込み中...</p>';
 
         try {
-          const response = await fetch("/api/tasks/today");
+          // 選択された日付のYYYY-MM-DD形式の文字列を作成
+          const dateStr = selectedDate.toISOString().split("T")[0];
+
+          const response = await fetch(`/api/tasks/date?date=${dateStr}`);
 
           if (!response.ok) {
+            // 404の場合はタスクがないだけなので、空配列として処理
+            if (response.status === 404) {
+              displayTasks([]);
+              updateTodayTotalHours([]);
+              return;
+            }
             container.innerHTML =
               '<p style="text-align: center; color: #ff0000; padding: 20px;">エラー: タスクの読み込みに失敗しました</p>';
             return;
@@ -331,12 +488,17 @@
         }
       }
 
+      // 今日のタスク読み込み（互換性のため残す）
+      async function loadTodayTasks() {
+        await loadTasksForSelectedDate();
+      }
+
       function displayTasks(tasks) {
         const container = document.getElementById("tasks-container");
 
         if (!tasks || tasks.length === 0) {
           container.innerHTML =
-            '<p style="text-align: center; color: #999; padding: 40px;">まだタスクがありません</p>';
+            '<p style="text-align: center; color: #999; padding: 40px;">この日はタスクがありません</p>';
           return;
         }
 
@@ -375,11 +537,11 @@
                     <div class="task-item">
                         <div class="task-info">
                             <div class="task-name">${escapeHtml(
-                              task.task_name,
+                              task.task_name
                             )}</div>
                             <div class="task-meta">
                                 <span class="task-badge badge-category">📁 ${escapeHtml(
-                                  task.category,
+                                  task.category
                                 )}</span>
                                 <span class="task-badge badge-time">⏱ ${timeText}</span>
                                 <span class="task-badge badge-start">🕐 開始: ${startTime}</span>
@@ -388,7 +550,7 @@
                             ${
                               task.memo
                                 ? `<div style="color: #666; font-size: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;">📝 ${escapeHtml(
-                                    task.memo,
+                                    task.memo
                                   )}</div>`
                                 : ""
                             }
@@ -445,6 +607,9 @@
         }
 
         try {
+          // 選択された日付をISO形式で送信
+          const dateStr = selectedDate.toISOString().split("T")[0];
+
           const response = await fetch("/api/task/add", {
             method: "POST",
             headers: {
@@ -454,6 +619,7 @@
               task_name: taskName,
               category: category,
               memo: memo,
+              created_date: dateStr,
             }),
           });
 
@@ -537,9 +703,9 @@
         const secs = seconds % 60;
 
         document.getElementById("timer").textContent = `${String(
-          hours,
+          hours
         ).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(
-          secs,
+          secs
         ).padStart(2, "0")}`;
       }
 
@@ -564,7 +730,7 @@
             throw new Error("タスクの保存に失敗しました");
           }
 
-          await loadTodayTasks();
+          await loadTasksForSelectedDate();
 
           document.getElementById("task-name").value = "";
           document.getElementById("category").value = "";
@@ -597,9 +763,9 @@
       async function openEditModal(taskId) {
         editingTaskId = taskId;
 
-        // タスク情報を取得
         try {
-          const response = await fetch("/api/tasks/today");
+          const dateStr = selectedDate.toISOString().split("T")[0];
+          const response = await fetch(`/api/tasks/date?date=${dateStr}`);
           if (!response.ok) throw new Error("タスク情報の取得に失敗しました");
 
           const data = await response.json();
@@ -610,12 +776,10 @@
             return;
           }
 
-          // モーダルにデータをセット
           document.getElementById("edit-task-name").value = task.task_name;
           document.getElementById("edit-category").value = task.category;
           document.getElementById("edit-memo").value = task.memo || "";
 
-          // モーダルを表示
           document.getElementById("edit-modal").classList.add("active");
         } catch (error) {
           console.error("エラー:", error);
@@ -658,7 +822,7 @@
           }
 
           closeEditModal();
-          await loadTodayTasks();
+          await loadTasksForSelectedDate();
           alert("タスクを更新しました！");
         } catch (error) {
           console.error("エラー:", error);
@@ -683,7 +847,7 @@
             throw new Error("タスクの削除に失敗しました");
           }
 
-          loadTodayTasks();
+          loadTasksForSelectedDate();
           alert("タスクを削除しました");
         } catch (error) {
           console.error("エラー:", error);
@@ -698,7 +862,7 @@
 
         try {
           const response = await fetch(
-            `/api/report/monthly?year=${year}&month=${month}&group_by=${groupBy}`,
+            `/api/report/monthly?year=${year}&month=${month}&group_by=${groupBy}`
           );
 
           if (!response.ok) {
@@ -713,8 +877,9 @@
 
           document.getElementById("total-days").textContent = `${totalDays}日`;
           document.getElementById("total-hours").textContent = `${totalHours}h`;
-          document.getElementById("total-tasks").textContent =
-            `${totalTasks}件`;
+          document.getElementById(
+            "total-tasks"
+          ).textContent = `${totalTasks}件`;
 
           displayReportTable(data.data || []);
         } catch (error) {
@@ -768,7 +933,7 @@
 
         try {
           const response = await fetch(
-            `/api/export/csv?year=${year}&month=${month}`,
+            `/api/export/csv?year=${year}&month=${month}`
           );
 
           if (!response.ok) {
@@ -792,7 +957,6 @@
         }
       }
 
-      // モーダル外クリックで閉じる
       window.onclick = function (event) {
         const modal = document.getElementById("edit-modal");
         if (event.target === modal) {

@@ -117,6 +117,7 @@ def add_task():
     category = data.get('category')
     memo = data.get('memo', '')
     firebase_uid = data.get('firebase_uid')
+    created_date = data.get('created_date')  # 日付指定を受け付ける
     
     if not task_name or not category:
         return jsonify({'error': 'task_nameとcategoryは必須です'}), 400
@@ -124,11 +125,21 @@ def add_task():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("""
-            INSERT INTO tasks (task_name, category, memo, firebase_uid)
-            VALUES (%s, %s, %s, %s)
-            RETURNING *
-        """, (task_name, category, memo, firebase_uid))
+        
+        # created_dateが指定されている場合はそれを使用、なければCURRENT_DATE
+        if created_date:
+            cur.execute("""
+                INSERT INTO tasks (task_name, category, memo, firebase_uid, created_date)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING *
+            """, (task_name, category, memo, firebase_uid, created_date))
+        else:
+            cur.execute("""
+                INSERT INTO tasks (task_name, category, memo, firebase_uid)
+                VALUES (%s, %s, %s, %s)
+                RETURNING *
+            """, (task_name, category, memo, firebase_uid))
+        
         new_task = cur.fetchone()
         conn.commit()
         cur.close()
@@ -152,6 +163,34 @@ def get_today_tasks():
         cur.close()
         conn.close()
         return jsonify({'success': True, 'tasks': [dict(t) for t in tasks]}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tasks/date')
+def get_tasks_by_date():
+    """指定日付のタスク一覧を取得"""
+    date_str = request.args.get('date')
+    
+    if not date_str:
+        return jsonify({'error': 'dateパラメータは必須です'}), 400
+    
+    try:
+        # 日付の妥当性チェック
+        datetime.strptime(date_str, '%Y-%m-%d')
+        
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            SELECT * FROM tasks 
+            WHERE created_date = %s 
+            ORDER BY created_at DESC
+        """, (date_str,))
+        tasks = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'tasks': [dict(t) for t in tasks]}), 200
+    except ValueError:
+        return jsonify({'error': '日付の形式が正しくありません (YYYY-MM-DD)'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -238,21 +277,7 @@ def stop_task():
 
 @app.route('/api/task/update/<int:task_id>', methods=['POST'])
 def update_task(task_id):
-    """タスク編集
-    
-    Request Body (JSON):
-        {
-            "task_name": "タスク名",
-            "category": "カテゴリ",
-            "memo": "メモ (オプション)",
-            "firebase_uid": "ユーザーID (オプション)"
-        }
-    
-    Response:
-        200: {"success": true, "task": {...}}
-        400: {"error": "エラーメッセージ"}
-        404: {"error": "エラーメッセージ"}
-    """
+    """タスク編集"""
     data = request.get_json()
     task_name = data.get('task_name')
     category = data.get('category')
