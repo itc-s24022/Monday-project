@@ -207,4 +207,4 @@ marimo/_lsp/
 __marimo__/
 
 # Firebase Admin SDK key
-serviceAccountKey.json
+serviceAccountKey.jsonserviceAccountKey.json
