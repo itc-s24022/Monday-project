@@ -208,3 +208,11 @@ __marimo__/
 
 # Firebase Admin SDK key
 serviceAccountKey.jsonserviceAccountKey.json
+# venv
+venv/
+# Python
+__pycache__/
+*.pyc
+# secrets
+serviceAccountKey.json
+.env
